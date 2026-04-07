@@ -48,7 +48,7 @@ export function SkillToggle({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ json: { skillId: id, completed: next } }),
+        body: JSON.stringify({ skillId: id, completed: next }),
       });
 
       if (!res.ok) {

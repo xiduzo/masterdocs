@@ -36,14 +36,14 @@ export default async function RoadmapViewPage({ params }: RoadmapViewPageProps) 
 
       const res = await fetch(
         `${SERVER_URL}/trpc/progress.getSkillStates?input=${encodeURIComponent(
-          JSON.stringify({ json: { skillIds: allSkillIds } }),
+          JSON.stringify({ skillIds: allSkillIds }),
         )}`,
         { headers: { cookie }, cache: "no-store" },
       );
 
       if (res.ok) {
         const json = await res.json();
-        const data = json?.result?.data?.json;
+        const data = json?.result?.data;
         if (data) {
           isAuthenticated = data.isAuthenticated;
           serverCompletedSet = new Set<string>(data.completedIds ?? []);

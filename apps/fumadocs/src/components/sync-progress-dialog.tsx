@@ -52,7 +52,7 @@ export function SyncProgressDialog() {
 
         const json = await res.json();
         const serverIds: string[] =
-          json?.result?.data?.json?.completedIds ?? [];
+          json?.result?.data?.completedIds ?? [];
         const serverSet = new Set(serverIds);
         const localSet = new Set(localCompletedIds);
 
@@ -114,7 +114,7 @@ export function SyncProgressDialog() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ json: { completedIds, uncompletedIds } }),
+        body: JSON.stringify({ completedIds, uncompletedIds }),
       });
 
       if (!res.ok) throw new Error("Sync failed");

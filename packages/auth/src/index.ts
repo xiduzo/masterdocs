@@ -15,7 +15,7 @@ export function createAuth() {
       schema: schema,
     }),
     trustedOrigins: [
-      env.CORS_ORIGIN,
+      ...env.CORS_ORIGINS,
       "fumadocs-learning://",
       ...(env.NODE_ENV === "development"
         ? ["exp://", "exp://**", "exp://192.168.*.*:*/**", "http://localhost:8081"]

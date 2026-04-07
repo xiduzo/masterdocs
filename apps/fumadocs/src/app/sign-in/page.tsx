@@ -53,7 +53,7 @@ export default function SignInPage() {
       setLoading(true);
       try {
         const { error: verifyError } =
-          await authClient.emailOtp.verifyEmail({
+          await authClient.signIn.emailOtp({
             email: email.trim(),
             otp: otp.trim(),
           });

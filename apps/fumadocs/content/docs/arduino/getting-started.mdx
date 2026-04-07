@@ -1,0 +1,44 @@
+---
+title: Getting Started
+description: Set up the Arduino IDE, write your first sketch, and understand digital and analog I/O.
+roadmap: arduino
+track: arduino-fundamentals
+trackTitle: Arduino Fundamentals
+trackOrder: 1
+topicOrder: 1
+---
+
+Arduino is an open-source electronics platform with easy-to-use hardware and software. You write sketches (programs) in the Arduino IDE and upload them to a microcontroller board.
+
+## Set up the IDE and upload your first sketch
+
+Install the Arduino IDE (or use the Cloud Editor), connect your board via USB, and upload the Blink example to verify everything works.
+
+<YouTube id="ELUF8m24sEo" />
+
+- [Getting Started with Arduino](https://docs.arduino.cc/learn/starting-guide/getting-started-arduino/) — Official setup guide for the Arduino ecosystem.
+- [The Arduino Software IDE](https://docs.arduino.cc/learn/starting-guide/the-arduino-software-ide/) — IDE installation and interface walkthrough.
+- [Arduino Cloud Editor](https://docs.arduino.cc/learn/starting-guide/the-arduino-web-editor/) — Browser-based alternative to the desktop IDE.
+- [Blink](https://docs.arduino.cc/built-in-examples/basics/Blink/) — The classic first sketch: make the onboard LED blink.
+- [Bare Minimum Code](https://docs.arduino.cc/built-in-examples/basics/BareMinimum/) — The minimal sketch structure with `setup()` and `loop()`.
+
+<Skill id="arduino-ide-setup" label="Set up the Arduino IDE and upload a sketch to a board" />
+
+## Digital I/O
+
+Read buttons and switches with `digitalRead()`, control LEDs with `digitalWrite()`. Understand HIGH/LOW, INPUT/OUTPUT, and pull-up resistors.
+
+- [Digital Pins](https://docs.arduino.cc/learn/microcontrollers/digital-pins/) — How digital pins work, pin modes, and internal pull-ups.
+- [Button](https://docs.arduino.cc/built-in-examples/digital/Button/) — Read a pushbutton and control an LED.
+
+<Skill id="arduino-digital-io" label="Read digital inputs and control digital outputs" />
+
+## Analog input and PWM output
+
+Read variable voltages from sensors with `analogRead()` and simulate analog output using PWM with `analogWrite()`.
+
+- [Analog Input](https://docs.arduino.cc/learn/microcontrollers/analog-input/) — Reading analog sensors (0–1023 range).
+- [Analog Output (PWM)](https://docs.arduino.cc/learn/microcontrollers/analog-output/) — Controlling brightness and speed with pulse width modulation.
+- [Fade](https://docs.arduino.cc/built-in-examples/basics/Fade/) — Smoothly fade an LED using PWM.
+
+<Skill id="arduino-analog-pwm" label="Read analog inputs and use PWM for analog-like output" />

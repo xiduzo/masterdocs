@@ -1,0 +1,43 @@
+---
+title: MQTT and IoT
+description: Connect your Arduino to WiFi, communicate over MQTT, and integrate with IoT platforms.
+roadmap: arduino
+track: connectivity-and-iot
+trackTitle: Connectivity and IoT
+trackOrder: 3
+topicOrder: 1
+---
+
+MQTT (Message Queuing Telemetry Transport) is a lightweight publish/subscribe protocol perfect for microcontrollers. Pair an ESP32 or ESP8266 with the PubSubClient library and your Arduino can talk to any MQTT broker.
+
+## WiFi with ESP32 / ESP8266
+
+Get your board online using the built-in WiFi of an ESP32 or ESP8266. These boards are Arduino-compatible and support the Arduino IDE directly.
+
+<YouTube id="oCMOYS71NIo" />
+
+- [Arduino Tutorials Hub](https://docs.arduino.cc/tutorials/) — Filter by "WiFi" for official WiFi examples.
+- [ESP32 Arduino Core](https://docs.espressif.com/projects/arduino-esp32/en/latest/) — Official Espressif documentation for ESP32 in Arduino IDE.
+
+<Skill id="arduino-wifi" label="Connect an ESP32 or ESP8266 to WiFi from the Arduino IDE" />
+
+## MQTT fundamentals and PubSubClient
+
+Understand the publish/subscribe model, topics, QoS levels, and retained messages. Use the PubSubClient library to connect to a broker and send/receive messages.
+
+- [PubSubClient](https://pubsubclient.knolleary.net/) — The standard MQTT client library for Arduino. Includes API reference and examples.
+- [MQTT.org](https://mqtt.org/) — Protocol specification and concept overview.
+- [HiveMQ MQTT Essentials](https://www.hivemq.com/mqtt-essentials/) — Free multi-part course covering all MQTT concepts.
+
+<Skill id="arduino-mqtt" label="Publish and subscribe to MQTT topics using PubSubClient" />
+
+## Brokers and IoT platforms
+
+Connect to a local Mosquitto broker or a cloud platform like Adafruit IO or HiveMQ Cloud. Route sensor data to dashboards and trigger actions remotely.
+
+- [Eclipse Mosquitto](https://mosquitto.org/) — Lightweight open-source MQTT broker you can run locally.
+- [HiveMQ Cloud](https://www.hivemq.com/mqtt-cloud-broker/) — Free-tier cloud MQTT broker.
+- [Adafruit IO](https://io.adafruit.com/) — Beginner-friendly IoT platform with MQTT support and dashboards.
+- [Adafruit IO Guide](https://learn.adafruit.com/welcome-to-adafruit-io) — Getting started with Adafruit IO.
+
+<Skill id="arduino-broker" label="Connect to an MQTT broker and route data to an IoT platform" />

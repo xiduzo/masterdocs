@@ -20,7 +20,7 @@ export async function ProgressBar({ skillIds, label }: ProgressBarProps) {
 
       const res = await fetch(
         `${SERVER_URL}/trpc/progress.getSkillStates?input=${encodeURIComponent(
-          JSON.stringify({ json: { skillIds } }),
+          JSON.stringify({ skillIds }),
         )}`,
         {
           headers: { cookie },
@@ -30,7 +30,7 @@ export async function ProgressBar({ skillIds, label }: ProgressBarProps) {
 
       if (res.ok) {
         const json = await res.json();
-        const data = json?.result?.data?.json;
+        const data = json?.result?.data;
         if (data) {
           isAuthenticated = data.isAuthenticated;
           completed = data.completedIds?.length ?? 0;

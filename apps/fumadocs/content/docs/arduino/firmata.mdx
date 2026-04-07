@@ -1,0 +1,32 @@
+---
+title: Firmata Protocol
+description: Control Arduino pins directly from a host computer without writing Arduino sketches.
+roadmap: arduino
+track: creative-integrations
+trackTitle: Creative Integrations
+trackOrder: 4
+topicOrder: 1
+---
+
+Firmata is a protocol for communicating with microcontrollers from software on a host computer. Upload the StandardFirmata sketch once, and then control all pins directly from Processing, Python, JavaScript, Max/MSP, TouchDesigner, or any tool with a Firmata client — no Arduino programming required.
+
+## Upload StandardFirmata and understand the protocol
+
+Flash the StandardFirmata sketch (included with the Arduino IDE) to your board. Understand how the protocol exposes digital I/O, analog reads, PWM, I2C, and servo control over serial.
+
+- [Firmata Protocol](https://github.com/firmata/protocol) — Protocol specification on GitHub.
+- [Arduino Firmata Library](https://github.com/firmata/arduino) — The StandardFirmata sketch and library source.
+- [StandardFirmata Example](https://docs.arduino.cc/built-in-examples/) — Included in the Arduino IDE under File → Examples → Firmata.
+
+<Skill id="arduino-firmata-setup" label="Upload StandardFirmata and understand the Firmata protocol" />
+
+## Host-side Firmata clients
+
+Use a Firmata client library on your computer to talk to the board. Popular clients exist for almost every creative coding environment.
+
+- [Johnny-Five](http://johnny-five.io/) — JavaScript robotics & IoT framework built on Firmata. Works with Node.js.
+- [pyFirmata](https://github.com/tino/pyFirmata) — Python Firmata client for scripting Arduino from Python.
+- [Processing arduino library](https://playground.arduino.cc/Interfacing/Processing/) — Control Arduino from Processing sketches via Firmata.
+- [Firmata client list](https://github.com/firmata/protocol#firmata-client-libraries) — Full list of client libraries for many languages.
+
+<Skill id="arduino-firmata-clients" label="Control Arduino from a host using Johnny-Five, pyFirmata, or other clients" />

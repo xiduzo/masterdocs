@@ -1,0 +1,48 @@
+---
+title: Programming Essentials
+description: Serial communication, libraries, timing patterns, and debouncing for reliable sketches.
+roadmap: arduino
+track: arduino-fundamentals
+trackTitle: Arduino Fundamentals
+trackOrder: 1
+topicOrder: 3
+---
+
+Beyond basic I/O, you need a few essential programming patterns to write reliable Arduino code — serial debugging, external libraries, non-blocking timing, and clean input handling.
+
+## Serial communication and debugging
+
+Use `Serial.print()` and the Serial Monitor to debug your sketches, send data to a computer, and understand UART communication.
+
+- [UART Communication](https://docs.arduino.cc/learn/communication/uart/) — How serial communication works at the protocol level.
+- [ASCII Table](https://docs.arduino.cc/built-in-examples/communication/ASCIITable/) — Serial output example showing character encoding.
+- [Troubleshooting Sketches](https://docs.arduino.cc/learn/starting-guide/troubleshooting-sketches/) — Common issues and how to diagnose them.
+- [Debugging](https://docs.arduino.cc/learn/microcontrollers/debugging/) — Advanced debugging techniques.
+
+<Skill id="arduino-serial" label="Use serial communication for debugging and data exchange" />
+
+## Libraries and package management
+
+Install third-party libraries from the Library Manager, include them in your sketches, and find the right library for your hardware.
+
+- [Software Libraries](https://docs.arduino.cc/learn/starting-guide/software-libraries/) — Installing, managing, and using libraries.
+- [Arduino Cores](https://docs.arduino.cc/learn/starting-guide/cores/) — Board support packages for different microcontrollers.
+
+<Skill id="arduino-libraries" label="Install and use third-party libraries from the Library Manager" />
+
+## Non-blocking timing and interrupts
+
+Replace `delay()` with `millis()` for non-blocking code that can handle multiple tasks. Use interrupts for time-critical input.
+
+- [Blink Without Delay](https://docs.arduino.cc/built-in-examples/digital/BlinkWithoutDelay/) — The essential pattern for non-blocking timing with `millis()`.
+
+<Skill id="arduino-timing" label="Write non-blocking code using millis() and understand interrupts" />
+
+## Debouncing and state detection
+
+Handle noisy button signals and detect state changes (press/release edges) reliably.
+
+- [Debounce](https://docs.arduino.cc/built-in-examples/digital/Debounce/) — Filter out button bounce for clean reads.
+- [State Change Detection](https://docs.arduino.cc/built-in-examples/digital/StateChangeDetection/) — Detect when a button transitions from off to on.
+
+<Skill id="arduino-debounce" label="Debounce inputs and detect state changes reliably" />

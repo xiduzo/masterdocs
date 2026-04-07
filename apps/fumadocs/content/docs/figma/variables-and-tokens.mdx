@@ -1,0 +1,52 @@
+---
+title: Variables and Tokens
+description: Use variables for design tokens with aliasing, modes, and code synchronization.
+roadmap: figma
+track: components-and-design-systems
+trackTitle: Components and Design Systems
+trackOrder: 2
+topicOrder: 2
+---
+
+Variables store reusable values (colors, numbers, strings, booleans) you can apply to design properties. They are how you implement **design tokens** in Figma. Use variables for colors and spacing; use styles for typography and effects.
+
+## Create and apply variables
+
+Create color, number, string, and boolean variables in collections and bind them to fills, spacing, radii, and other properties.
+
+- [Guide to variables in Figma](https://help.figma.com/hc/en-us/articles/15339657135383) — Hub page linking to all variable topics.
+- [Overview of variables, collections, and modes](https://help.figma.com/hc/en-us/articles/14506821864087) — The data model explained.
+- [Create and manage variables](https://help.figma.com/hc/en-us/articles/15145852043927) — Create variables, scope usage.
+- [Apply variables to designs](https://help.figma.com/hc/en-us/articles/15343107263511) — Bind variables to design properties.
+- [Variables vs styles](https://help.figma.com/hc/en-us/articles/15871097384471) — When to use each.
+- [Variables playground](https://www.figma.com/community/file/1234936397107899445) — Community file for hands-on practice.
+
+<Skill id="figma-variables" label="Create and apply color, number, string, and boolean variables" />
+
+## Build a token hierarchy with aliasing
+
+Organize variables in three tiers — primitives, semantic, and component-level — using alias references so changing one primitive cascades through the entire system.
+
+- [Create and manage variables](https://help.figma.com/hc/en-us/articles/15145852043927) — Aliasing section covers referencing other variables.
+- [Extend a variable collection](https://help.figma.com/hc/en-us/articles/36346281624471) — Manage multi-brand systems with extended collections.
+- [Tokens, variables, and styles](https://help.figma.com/hc/en-us/articles/18490793776023) — Design Systems course lesson on migrating styles to variables.
+
+<Skill id="figma-variable-aliasing" label="Build a token hierarchy with aliased variable references" />
+
+## Modes for theming and responsive contexts
+
+Set up light/dark modes, breakpoint-aware spacing, or brand-specific palettes — all driven by variable modes applied to frames.
+
+- [Modes for variables](https://help.figma.com/hc/en-us/articles/15343816063383) — Set up light/dark modes and apply them to frames.
+- [Extend a variable collection](https://help.figma.com/hc/en-us/articles/36346281624471) — Extended collections for multi-mode systems.
+
+<Skill id="figma-modes" label="Set up variable modes for theming and responsive contexts" />
+
+## Sync variables to code
+
+Use the REST API, GitHub Actions, or Tokens Studio to push Figma variables into your codebase as design tokens.
+
+- [Variables REST API](https://www.figma.com/developers/api#variables) — Read and write variables programmatically.
+- [Syncing design systems using Variables REST API](https://www.figma.com/community/file/1270821372236564565) — Example of automated Figma-to-code sync.
+
+<Skill id="figma-token-sync" label="Sync Figma variables to code using the REST API or plugins" />

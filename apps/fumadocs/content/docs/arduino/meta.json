@@ -1,0 +1,20 @@
+{
+  "title": "Arduino",
+  "pages": [
+    "---Arduino Fundamentals---",
+    "getting-started",
+    "circuits-and-prototyping",
+    "programming-essentials",
+    "---Hardware Components---",
+    "sensors-and-input",
+    "displays-and-leds",
+    "motors-and-actuators",
+    "---Connectivity and IoT---",
+    "mqtt-and-iot",
+    "---Creative Integrations---",
+    "firmata",
+    "touchdesigner",
+    "microflow",
+    "other-integrations"
+  ]
+}
