@@ -53,18 +53,18 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 4. Extend Fumadocs content schema with roadmap frontmatter
-  - [-] 4.1 Update `apps/fumadocs/source.config.ts` to extend `pageSchema` with optional roadmap frontmatter fields
+- [x] 4. Extend Fumadocs content schema with roadmap frontmatter
+  - [x] 4.1 Update `apps/fumadocs/source.config.ts` to extend `pageSchema` with optional roadmap frontmatter fields
   - Add Zod schema for `roadmap`, `track`, `trackTitle`, `trackOrder`, `topicOrder` fields (all optional as a group)
   - Ensure invalid/missing frontmatter excludes the topic from roadmap views (build-time warning)
   - _Requirements: 1.1, 1.2, 1.5_
 
-  - [~] 4.2 Create roadmap content collection or metadata directory
+  - [x] 4.2 Create roadmap content collection or metadata directory
   - Add `content/roadmaps/` directory with MDX files for roadmap-level metadata (title, description)
   - Configure Fumadocs source loader to handle roadmap metadata files
   - _Requirements: 1.3, 7.1_
 
-  - [~] 4.3 Create sample roadmap content for development/testing
+  - [x] 4.3 Create sample roadmap content for development/testing
   - Create at least one sample roadmap with 2 tracks, each with 2 topics containing `<Skill>` components
   - Place files in `apps/fumadocs/content/docs/` with proper frontmatter
   - _Requirements: 1.1, 1.2, 2.1_
@@ -79,8 +79,8 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Generate mixed sets of valid/invalid frontmatter. Run through the roadmap structure builder and verify only valid topics are included.
   - **Validates: Requirements 1.5**
 
-- [ ] 5. Build roadmap structure utilities
-  - [~] 5.1 Create `apps/fumadocs/src/lib/roadmap.ts` with utility functions
+- [x] 5. Build roadmap structure utilities
+  - [x] 5.1 Create `apps/fumadocs/src/lib/roadmap.ts` with utility functions
   - Implement `getRoadmapStructure(roadmapSlug)` — filters source pages by roadmap frontmatter, groups by track, sorts by trackOrder/topicOrder, extracts skill IDs per topic
   - Implement `getAllRoadmaps()` — returns list of all roadmap metadata
   - Implement `getTopicNavigation(roadmapSlug, trackSlug, topicOrder)` — returns prev/next topic links within a track
@@ -106,7 +106,7 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Generate ordered topic lists and random index. Verify correct adjacent topic links (null at boundaries).
   - **Validates: Requirements 7.4**
 
-- [~] 6. Checkpoint — Verify content schema and utilities
+- [x] 6. Checkpoint — Verify content schema and utilities
   - Ensure all tests pass, ask the user if questions arise.
 
 

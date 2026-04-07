@@ -1,4 +1,4 @@
-import { docs } from "collections/server";
+import { docs, roadmaps } from "collections/server";
 import { type InferPageType, loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 
@@ -28,6 +28,10 @@ export function getPageMarkdownUrl(page: InferPageType<typeof source>) {
     url: `${docsContentRoute}/${segments.join("/")}`,
   };
 }
+
+// Roadmap metadata entries from content/roadmaps/ MDX files.
+// Each entry has frontmatter with title and description, plus a slug derived from the filename.
+export { roadmaps as roadmapEntries };
 
 export async function getLLMText(page: InferPageType<typeof source>) {
   const processed = await page.data.getText("processed");

@@ -1,5 +1,5 @@
 import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
-import { defineConfig, defineDocs } from "fumadocs-mdx/config";
+import { defineCollections, defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { z } from "zod";
 
 // Extend pageSchema with optional roadmap frontmatter fields.
@@ -24,6 +24,14 @@ export const docs = defineDocs({
   meta: {
     schema: metaSchema,
   },
+});
+
+// Roadmap metadata collection — simple MDX files with title and description frontmatter.
+// These define top-level roadmap info displayed on the roadmap index page.
+export const roadmaps = defineCollections({
+  type: "doc",
+  dir: "content/roadmaps",
+  schema: pageSchema,
 });
 
 export default defineConfig({
