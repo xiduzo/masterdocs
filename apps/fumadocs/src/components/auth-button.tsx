@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
+import Link from "next/link";
 import { useSession, signOut } from "@/lib/auth-client";
-import { SignInDialog } from "./sign-in-dialog";
 
 export function AuthButton() {
   const { data: session, isPending } = useSession();
-  const [showDialog, setShowDialog] = useState(false);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -21,9 +20,12 @@ export function AuthButton() {
   if (session?.user) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-sm text-fd-muted-foreground">
+        <Link
+          href="/profile"
+          className="text-sm text-fd-muted-foreground hover:text-fd-foreground"
+        >
           {session.user.name || session.user.email}
-        </span>
+        </Link>
         <button
           type="button"
           onClick={handleSignOut}
@@ -36,17 +38,11 @@ export function AuthButton() {
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setShowDialog(true)}
-        className="rounded-md bg-fd-primary px-3 py-1.5 text-sm font-medium text-fd-primary-foreground hover:bg-fd-primary/90"
-      >
-        Sign In
-      </button>
-      {showDialog && (
-        <SignInDialog onClose={() => setShowDialog(false)} />
-      )}
-    </>
+    <Link
+      href="/sign-in"
+      className="rounded-md bg-fd-primary px-3 py-1.5 text-sm font-medium text-fd-primary-foreground hover:bg-fd-primary/90"
+    >
+      Sign In
+    </Link>
   );
 }

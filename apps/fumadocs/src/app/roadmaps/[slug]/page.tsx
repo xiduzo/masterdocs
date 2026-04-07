@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { getRoadmapStructure } from "@/lib/roadmap";
 import { ProgressBar } from "@/components/progress-bar";
+import { TopicRow } from "@/components/topic-row.client";
+
+const SERVER_URL =
+  process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3000";
 
 interface RoadmapViewPageProps {
   params: Promise<{ slug: string }>;
@@ -15,24 +20,61 @@ export default async function RoadmapViewPage({ params }: RoadmapViewPageProps) 
     notFound();
   }
 
-  // Collect all skill IDs across the entire roadmap for the overall progress bar
+  // Collect all skill IDs across the entire roadmap
   const allSkillIds = roadmap.tracks.flatMap((track) =>
     track.topics.flatMap((topic) => topic.skillIds),
   );
+
+  // Fetch server-side completion state for all skills at once
+  let isAuthenticated = false;
+  let serverCompletedSet = new Set<string>();
+
+  if (allSkillIds.length > 0) {
+    try {
+      const reqHeaders = await headers();
+      const cookie = reqHeaders.get("cookie") ?? "";
+
+      const res = await fetch(
+        `${SERVER_URL}/trpc/progress.getSkillStates?input=${encodeURIComponent(
+          JSON.stringify({ json: { skillIds: allSkillIds } }),
+        )}`,
+        { headers: { cookie }, cache: "no-store" },
+      );
+
+      if (res.ok) {
+        const json = await res.json();
+        const data = json?.result?.data?.json;
+        if (data) {
+          isAuthenticated = data.isAuthenticated;
+          serverCompletedSet = new Set<string>(data.completedIds ?? []);
+        }
+      }
+    } catch {
+      // fall through as unauthenticated
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col px-4 py-12">
       <div className="mx-auto w-full max-w-3xl">
         <Link
-          href="/roadmaps"
+          href="/"
           className="mb-4 inline-flex items-center text-sm text-fd-muted-foreground hover:text-fd-foreground"
         >
           ← All Roadmaps
         </Link>
 
-        <h1 className="mb-1 text-2xl font-bold text-fd-foreground">
-          {roadmap.title}
-        </h1>
+        <div className="mb-1 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-fd-foreground">
+            {roadmap.title}
+          </h1>
+          <a
+            href={`/docs/${slug}`}
+            className="rounded-md px-3 py-1.5 text-sm text-fd-muted-foreground hover:bg-fd-accent hover:text-fd-foreground transition-colors"
+          >
+            Getting Started →
+          </a>
+        </div>
         {roadmap.description && (
           <p className="mb-4 text-fd-muted-foreground">
             {roadmap.description}
@@ -60,14 +102,16 @@ export default async function RoadmapViewPage({ params }: RoadmapViewPageProps) 
 
                 <ul className="mt-4 flex flex-col gap-2">
                   {track.topics.map((topic) => (
-                    <li key={topic.slug}>
-                      <Link
-                        href={topic.url}
-                        className="text-sm text-fd-primary underline-offset-4 hover:underline"
-                      >
-                        {topic.title}
-                      </Link>
-                    </li>
+                    <TopicRow
+                      key={topic.slug}
+                      title={topic.title}
+                      url={topic.url}
+                      skillIds={topic.skillIds}
+                      serverCompleted={
+                        topic.skillIds.filter((id) => serverCompletedSet.has(id)).length
+                      }
+                      isAuthenticated={isAuthenticated}
+                    />
                   ))}
                 </ul>
               </section>

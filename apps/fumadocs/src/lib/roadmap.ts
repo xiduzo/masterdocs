@@ -22,10 +22,6 @@ export interface TopicStructure {
   slug: string;
   title: string;
   order: number;
-  // TODO: Skill IDs are embedded in MDX content as <Skill id="..." /> components.
-  // Extracting them at build/request time requires parsing MDX content, which isn't
-  // straightforward here. For now this is an empty array. A future approach could
-  // extract skill IDs via frontmatter metadata or a build-time plugin.
   skillIds: string[];
   url: string;
 }
@@ -111,7 +107,7 @@ export function getRoadmapStructure(
       slug: page.slugs[page.slugs.length - 1],
       title: page.data.title,
       order: topicOrder,
-      skillIds: [], // TODO: extract from MDX content (see note on TopicStructure)
+      skillIds: extractSkillIdsFromPage(page.path),
       url: page.url,
     });
   }
@@ -133,13 +129,13 @@ export function getRoadmapStructure(
 }
 
 /**
- * Returns prev/next topic navigation links within a track.
- * Returns `undefined` for prev when at the first topic, and `undefined`
- * for next when at the last topic.
+ * Returns prev/next topic navigation links across the entire roadmap.
+ * Topics are ordered by trackOrder then topicOrder, so navigation flows
+ * from the last topic of one track into the first topic of the next.
  */
 export function getTopicNavigation(
   roadmapSlug: string,
-  trackSlug: string,
+  _trackSlug: string,
   topicOrder: number,
 ): {
   prev: { title: string; url: string } | undefined;
@@ -148,21 +144,32 @@ export function getTopicNavigation(
   const structure = getRoadmapStructure(roadmapSlug);
   if (!structure) return undefined;
 
-  const track = structure.tracks.find((t) => t.slug === trackSlug);
+  // Flatten all topics across all tracks in order
+  const allTopics: TopicStructure[] = [];
+  for (const track of structure.tracks) {
+    for (const topic of track.topics) {
+      allTopics.push(topic);
+    }
+  }
+
+  // Find current topic by matching track and topicOrder
+  const track = structure.tracks.find((t) => t.slug === _trackSlug);
   if (!track) return undefined;
 
-  // Topics are already sorted by order from getRoadmapStructure
-  const index = track.topics.findIndex((t) => t.order === topicOrder);
+  const currentTopic = track.topics.find((t) => t.order === topicOrder);
+  if (!currentTopic) return undefined;
+
+  const index = allTopics.findIndex((t) => t.url === currentTopic.url);
   if (index === -1) return undefined;
 
   return {
     prev:
       index > 0
-        ? { title: track.topics[index - 1].title, url: track.topics[index - 1].url }
+        ? { title: allTopics[index - 1].title, url: allTopics[index - 1].url }
         : undefined,
     next:
-      index < track.topics.length - 1
-        ? { title: track.topics[index + 1].title, url: track.topics[index + 1].url }
+      index < allTopics.length - 1
+        ? { title: allTopics[index + 1].title, url: allTopics[index + 1].url }
         : undefined,
   };
 }

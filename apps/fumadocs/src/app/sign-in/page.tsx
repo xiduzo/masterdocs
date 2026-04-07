@@ -1,16 +1,25 @@
 "use client";
 
-import { useState, useCallback, type FormEvent } from "react";
-import { authClient } from "@/lib/auth-client";
+import { useState, useCallback, useEffect, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { authClient, useSession } from "@/lib/auth-client";
 
 type Step = "email" | "otp";
 
-export function SignInDialog({ onClose }: { onClose: () => void }) {
+export default function SignInPage() {
+  const router = useRouter();
+  const { data: session, isPending } = useSession();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isPending && session?.user) {
+      router.replace("/profile");
+    }
+  }, [session, isPending, router]);
 
   const handleSendOtp = useCallback(
     async (e: FormEvent) => {
@@ -51,7 +60,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
         if (verifyError) {
           setError(verifyError.message ?? "Invalid OTP");
         } else {
-          onClose();
+          router.replace("/profile");
         }
       } catch {
         setError("Verification failed. Please try again.");
@@ -59,31 +68,23 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
         setLoading(false);
       }
     },
-    [email, otp, onClose],
+    [email, otp, router],
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-        onKeyDown={(e) => e.key === "Escape" && onClose()}
-        role="button"
-        tabIndex={-1}
-        aria-label="Close dialog"
-      />
+  if (isPending || session?.user) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="h-8 w-32 animate-pulse rounded-md bg-fd-muted" />
+      </div>
+    );
+  }
 
-      {/* Dialog */}
-      <div
-        className="relative z-10 w-full max-w-sm rounded-lg border border-fd-border bg-fd-card p-6 shadow-lg"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Sign in"
-      >
-        <h2 className="mb-4 text-lg font-semibold text-fd-foreground">
+  return (
+    <div className="flex flex-1 items-start justify-center px-4 py-12">
+      <div className="w-full max-w-sm rounded-lg border border-fd-border bg-fd-card p-6 shadow-sm">
+        <h1 className="mb-4 text-lg font-semibold text-fd-foreground">
           Sign In
-        </h2>
+        </h1>
 
         {step === "email" ? (
           <form onSubmit={handleSendOtp} className="flex flex-col gap-3">

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, and, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
-import { protectedProcedure, router } from "../index";
+import { protectedProcedure, publicProcedure, router } from "../index";
 import { db } from "@fumadocs-learning/db";
 import { skillProgress } from "@fumadocs-learning/db/schema/skill-progress";
 import { getRoadmapContent } from "../lib/roadmap-content";
@@ -134,5 +134,95 @@ export const progressRouter = router({
       };
 
       return { tracks, overall };
+    }),
+
+  /**
+   * Bulk sync local progress after sign-in.
+   * Accepts resolved choices from the client and applies them.
+   */
+  bulkSync: protectedProcedure
+    .input(
+      z.object({
+        /** Skill IDs the user chose to mark as completed */
+        completedIds: z.array(z.string()),
+        /** Skill IDs the user chose to mark as not completed */
+        uncompletedIds: z.array(z.string()),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      // Insert completed skills (idempotent)
+      if (input.completedIds.length > 0) {
+        await db
+          .insert(skillProgress)
+          .values(
+            input.completedIds.map((skillId) => ({
+              userId,
+              skillId,
+            })),
+          )
+          .onConflictDoNothing({
+            target: [skillProgress.userId, skillProgress.skillId],
+          });
+      }
+
+      // Remove uncompleted skills
+      if (input.uncompletedIds.length > 0) {
+        await db
+          .delete(skillProgress)
+          .where(
+            and(
+              eq(skillProgress.userId, userId),
+              inArray(skillProgress.skillId, input.uncompletedIds),
+            ),
+          );
+      }
+
+      return { success: true };
+    }),
+
+  /**
+   * Fetch all completed skill IDs for the current user.
+   * Used during sync to compare local vs server state.
+   */
+  getAllCompleted: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const records = await db.query.skillProgress.findMany({
+      where: eq(skillProgress.userId, userId),
+    });
+    return { completedIds: records.map((r) => r.skillId) };
+  }),
+
+  /**
+   * Public endpoint for RSC components to fetch skill completion states.
+   * Returns auth status + completed skill IDs for the given set.
+   * Unauthenticated users get isAuthenticated=false and empty completedIds.
+   */
+  getSkillStates: publicProcedure
+    .input(
+      z.object({
+        skillIds: z.array(z.string()),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (!ctx.session?.user || input.skillIds.length === 0) {
+        return {
+          isAuthenticated: !!ctx.session?.user,
+          completedIds: [] as string[],
+        };
+      }
+
+      const records = await db.query.skillProgress.findMany({
+        where: and(
+          eq(skillProgress.userId, ctx.session.user.id),
+          inArray(skillProgress.skillId, input.skillIds),
+        ),
+      });
+
+      return {
+        isAuthenticated: true,
+        completedIds: records.map((r) => r.skillId),
+      };
     }),
 });

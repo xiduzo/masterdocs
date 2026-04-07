@@ -1,9 +1,8 @@
-import { db } from "@fumadocs-learning/db";
-import { skillProgress } from "@fumadocs-learning/db/schema/index";
-import { auth } from "@fumadocs-learning/auth";
-import { eq, and, inArray } from "drizzle-orm";
 import { headers } from "next/headers";
 import { ProgressBarClient } from "./progress-bar.client";
+
+const SERVER_URL =
+  process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3000";
 
 interface ProgressBarProps {
   skillIds: string[];
@@ -11,25 +10,44 @@ interface ProgressBarProps {
 }
 
 export async function ProgressBar({ skillIds, label }: ProgressBarProps) {
-  const session = await auth.api.getSession({ headers: await headers() });
-
   let completed = 0;
-  if (session?.user && skillIds.length > 0) {
-    const records = await db.query.skillProgress.findMany({
-      where: and(
-        eq(skillProgress.userId, session.user.id),
-        inArray(skillProgress.skillId, skillIds),
-      ),
-    });
-    completed = records.length;
+  let isAuthenticated = false;
+
+  if (skillIds.length > 0) {
+    try {
+      const reqHeaders = await headers();
+      const cookie = reqHeaders.get("cookie") ?? "";
+
+      const res = await fetch(
+        `${SERVER_URL}/trpc/progress.getSkillStates?input=${encodeURIComponent(
+          JSON.stringify({ json: { skillIds } }),
+        )}`,
+        {
+          headers: { cookie },
+          cache: "no-store",
+        },
+      );
+
+      if (res.ok) {
+        const json = await res.json();
+        const data = json?.result?.data?.json;
+        if (data) {
+          isAuthenticated = data.isAuthenticated;
+          completed = data.completedIds?.length ?? 0;
+        }
+      }
+    } catch {
+      // If the API is unreachable, render as unauthenticated
+    }
   }
 
   return (
     <ProgressBarClient
       completed={completed}
       total={skillIds.length}
+      skillIds={skillIds}
       label={label}
-      isAuthenticated={!!session?.user}
+      isAuthenticated={isAuthenticated}
     />
   );
 }

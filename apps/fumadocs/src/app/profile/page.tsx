@@ -64,10 +64,10 @@ export default function ProfilePage() {
           Sign in to view your profile.
         </p>
         <Link
-          href="/"
+          href="/sign-in"
           className="rounded-md bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground hover:bg-fd-primary/90"
         >
-          Go Home
+          Sign In
         </Link>
       </div>
     );

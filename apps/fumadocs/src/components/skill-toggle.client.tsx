@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useProgressStore } from "@/lib/progress-store";
 
 interface SkillToggleProps {
   id: string;
@@ -20,20 +21,26 @@ export function SkillToggle({
   isAuthenticated,
 }: SkillToggleProps) {
   const router = useRouter();
-  const [completed, setCompleted] = useState(initialCompleted);
+  const [serverCompleted, setServerCompleted] = useState(initialCompleted);
   const [pending, setPending] = useState(false);
-  const [showSignInPrompt, setShowSignInPrompt] = useState(false);
+
+  const localCompleted = useProgressStore((s) => s.isCompleted(id));
+  const toggleLocal = useProgressStore((s) => s.toggleSkill);
+
+  // Use server state when authenticated, local state when not
+  const completed = isAuthenticated ? serverCompleted : localCompleted;
 
   const handleToggle = useCallback(async () => {
+    const next = !completed;
+
     if (!isAuthenticated) {
-      setShowSignInPrompt(true);
+      // Store in local storage via zustand
+      toggleLocal(id, next);
       return;
     }
 
-    const next = !completed;
-
-    // Optimistic update
-    setCompleted(next);
+    // Authenticated: optimistic update + server call
+    setServerCompleted(next);
     setPending(true);
 
     try {
@@ -48,28 +55,22 @@ export function SkillToggle({
         throw new Error("Request failed");
       }
 
-      // Refresh server components to pick up new state
       router.refresh();
     } catch {
-      // Revert optimistic update
-      setCompleted(!next);
+      setServerCompleted(!next);
       showErrorToast("Could not save progress. Please try again.");
     } finally {
       setPending(false);
     }
-  }, [completed, id, isAuthenticated, router]);
+  }, [completed, id, isAuthenticated, router, toggleLocal]);
 
   return (
     <div className="my-2 flex items-start gap-3">
-      <label
-        className={`flex items-center gap-2 text-sm ${
-          !isAuthenticated ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-        }`}
-      >
+      <label className="flex items-center gap-2 text-sm cursor-pointer">
         <input
           type="checkbox"
           checked={completed}
-          disabled={!isAuthenticated || pending}
+          disabled={pending}
           onChange={handleToggle}
           className="h-4 w-4 rounded border-fd-border accent-fd-primary disabled:cursor-not-allowed"
           aria-label={`Mark "${label}" as ${completed ? "incomplete" : "complete"}`}
@@ -84,18 +85,11 @@ export function SkillToggle({
           {label}
         </span>
       </label>
-
-      {showSignInPrompt && !isAuthenticated && (
-        <span className="text-xs text-fd-muted-foreground">
-          Sign in to track your progress
-        </span>
-      )}
     </div>
   );
 }
 
 function showErrorToast(message: string) {
-  // Lightweight toast: render a temporary DOM element
   if (typeof document === "undefined") return;
 
   const toast = document.createElement("div");

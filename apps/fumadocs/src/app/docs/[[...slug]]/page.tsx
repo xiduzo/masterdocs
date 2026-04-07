@@ -7,7 +7,6 @@ import {
   ViewOptionsPopover,
 } from "fumadocs-ui/layouts/docs/page";
 import { createRelativeLink } from "fumadocs-ui/mdx";
-import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -35,8 +34,22 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
     ? getTopicNavigation(roadmap, track, topicOrder)
     : undefined;
 
+  // For roadmap topics, override the built-in footer nav with track-aware prev/next
+  const footerOptions = isRoadmapTopic && navigation
+    ? {
+        items: {
+          previous: navigation.prev
+            ? { name: navigation.prev.title, url: navigation.prev.url }
+            : undefined,
+          next: navigation.next
+            ? { name: navigation.next.title, url: navigation.next.url }
+            : undefined,
+        },
+      }
+    : {};
+
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage toc={page.data.toc} full={page.data.full} footer={footerOptions}>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
       <div className="flex flex-row gap-2 items-center border-b pb-6">
@@ -57,32 +70,6 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           })}
         />
       </DocsBody>
-      {isRoadmapTopic && navigation && (navigation.prev || navigation.next) && (
-        <nav className="mt-6 flex items-center justify-between border-t border-fd-border pt-4">
-          {navigation.prev ? (
-            <Link
-              href={navigation.prev.url}
-              className="flex flex-col gap-1 text-sm text-fd-muted-foreground hover:text-fd-foreground"
-            >
-              <span className="text-xs">Previous</span>
-              <span className="font-medium">← {navigation.prev.title}</span>
-            </Link>
-          ) : (
-            <div />
-          )}
-          {navigation.next ? (
-            <Link
-              href={navigation.next.url}
-              className="flex flex-col items-end gap-1 text-sm text-fd-muted-foreground hover:text-fd-foreground"
-            >
-              <span className="text-xs">Next</span>
-              <span className="font-medium">{navigation.next.title} →</span>
-            </Link>
-          ) : (
-            <div />
-          )}
-        </nav>
-      )}
     </DocsPage>
   );
 }
