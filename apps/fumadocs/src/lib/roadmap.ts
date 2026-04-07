@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { source, roadmapEntries } from "./source";
 
 // --- Interfaces ---
@@ -163,4 +165,27 @@ export function getTopicNavigation(
         ? { title: track.topics[index + 1].title, url: track.topics[index + 1].url }
         : undefined,
   };
+}
+
+
+/**
+ * Extracts skill IDs from a page's raw MDX content by matching
+ * `<Skill id="..." />` patterns.
+ *
+ * @param pagePath - The page's relative path (e.g. "frontend-development/variables-and-data-types.mdx")
+ */
+export function extractSkillIdsFromPage(pagePath: string): string[] {
+  try {
+    const fullPath = join(process.cwd(), "content/docs", pagePath);
+    const content = readFileSync(fullPath, "utf-8");
+    const regex = /<Skill\s[^>]*id=["']([^"']+)["'][^>]*\/?>/g;
+    const ids: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content)) !== null) {
+      ids.push(match[1]);
+    }
+    return ids;
+  } catch {
+    return [];
+  }
 }

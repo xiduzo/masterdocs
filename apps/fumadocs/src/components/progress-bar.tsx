@@ -1,5 +1,5 @@
 import { db } from "@fumadocs-learning/db";
-import { skillProgress } from "@fumadocs-learning/db/schema";
+import { skillProgress } from "@fumadocs-learning/db/schema/index";
 import { auth } from "@fumadocs-learning/auth";
 import { eq, and, inArray } from "drizzle-orm";
 import { headers } from "next/headers";

@@ -189,26 +189,26 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 11. Build Roadmap pages and navigation
-  - [-] 11.1 Create Roadmap index page
+- [x] 11. Build Roadmap pages and navigation
+  - [x] 11.1 Create Roadmap index page
   - Add `/roadmaps` route in `apps/fumadocs` listing all roadmaps with name, description, and link to each roadmap view
   - Use `getAllRoadmaps()` utility from step 5.1
   - _Requirements: 7.1, 7.2_
 
-  - [~] 11.2 Create Roadmap view page
+  - [x] 11.2 Create Roadmap view page
   - Add `/roadmaps/[slug]` route displaying all tracks within a roadmap
   - Show track names, topic lists, and track-level `<ProgressBar>` components
   - Show overall roadmap `<ProgressBar>` at the top
   - Use `getRoadmapStructure()` utility from step 5.1
   - _Requirements: 1.3, 1.4, 5.2, 5.3, 7.2, 7.3_
 
-  - [~] 11.3 Add topic-level progress bar and prev/next navigation to topic pages
+  - [x] 11.3 Add topic-level progress bar and prev/next navigation to topic pages
   - Update the docs page layout or create a wrapper for roadmap topic pages
   - Add `<ProgressBar>` for the current topic's skills
   - Add prev/next topic navigation links using `getTopicNavigation()` from step 5.1
   - _Requirements: 5.1, 7.4_
 
-  - [~] 11.4 Integrate roadmap entries into Fumadocs sidebar
+  - [x] 11.4 Integrate roadmap entries into Fumadocs sidebar
   - Add roadmap navigation entries to the Fumadocs sidebar configuration alongside existing docs pages
   - _Requirements: 7.5_
 
@@ -218,8 +218,8 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Test navigation links point to correct pages
   - _Requirements: 7.1, 7.2, 7.3_
 
-- [ ] 12. Build-time validation for skill IDs and frontmatter
-  - [~] 12.1 Implement build-time validation in the Fumadocs MDX pipeline
+- [x] 12. Build-time validation for skill IDs and frontmatter
+  - [x] 12.1 Implement build-time validation in the Fumadocs MDX pipeline
   - Validate that all `<Skill>` components have `id` and `label` props (block build on missing)
   - Validate skill ID uniqueness within each roadmap (block build on duplicates)
   - Log warnings for invalid/missing roadmap frontmatter
@@ -232,8 +232,8 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Test that invalid frontmatter logs a warning but doesn't block
   - _Requirements: 1.5, 2.4, 2.5_
 
-- [ ] 13. Wire getSummary and getByRoadmap to use content structure
-  - [~] 13.1 Update `getSummary` and `getByRoadmap` tRPC endpoints to resolve roadmap skill IDs from content
+- [x] 13. Wire getSummary and getByRoadmap to use content structure
+  - [x] 13.1 Update `getSummary` and `getByRoadmap` tRPC endpoints to resolve roadmap skill IDs from content
   - Import or call the roadmap structure utilities to determine which skill IDs belong to a given roadmap
   - Validate roadmap slug exists, return NOT_FOUND if not
   - Filter progress records to only skills within the requested roadmap
@@ -245,7 +245,7 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Test NOT_FOUND for invalid roadmap slug
   - _Requirements: 8.1, 8.2, 8.4_
 
-- [~] 14. Final checkpoint — End-to-end verification
+- [x] 14. Final checkpoint — End-to-end verification
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
