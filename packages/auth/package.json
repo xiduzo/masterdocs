@@ -1,0 +1,25 @@
+{
+  "name": "@fumadocs-learning/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@better-auth/expo": "catalog:",
+    "@fumadocs-learning/db": "workspace:*",
+    "@fumadocs-learning/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@fumadocs-learning/config": "workspace:*",
+    "typescript": "^5"
+  }
+}

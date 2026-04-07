@@ -1,0 +1,3 @@
+{
+  "extends": "@fumadocs-learning/config/tsconfig.base.json"
+}

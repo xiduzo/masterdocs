@@ -1,0 +1,56 @@
+{
+  "name": "fumadocs-learning",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "dotenv": "^17.2.2",
+      "zod": "^4.1.13",
+      "@types/bun": "^1.3.4",
+      "hono": "^4.8.2",
+      "@trpc/server": "^11.13.4",
+      "better-auth": "1.5.5",
+      "lucide-react": "^0.546.0",
+      "next-themes": "^0.4.6",
+      "sonner": "^2.0.5",
+      "@trpc/tanstack-react-query": "^11.13.4",
+      "@trpc/client": "^11.13.4",
+      "@tanstack/react-query": "^5.90.12",
+      "@tanstack/react-form": "^1.28.0",
+      "@types/react-dom": "^19.2.3",
+      "@better-auth/expo": "1.5.5"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "db:push": "turbo -F @fumadocs-learning/db db:push",
+    "db:studio": "turbo -F @fumadocs-learning/db db:studio",
+    "db:generate": "turbo -F @fumadocs-learning/db db:generate",
+    "db:migrate": "turbo -F @fumadocs-learning/db db:migrate",
+    "db:start": "turbo -F @fumadocs-learning/db db:start",
+    "db:watch": "turbo -F @fumadocs-learning/db db:watch",
+    "db:stop": "turbo -F @fumadocs-learning/db db:stop",
+    "db:down": "turbo -F @fumadocs-learning/db db:down"
+  },
+  "dependencies": {
+    "@fumadocs-learning/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@fumadocs-learning/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "turbo": "^2.8.12",
+    "typescript": "^5"
+  },
+  "packageManager": "bun@1.3.10"
+}

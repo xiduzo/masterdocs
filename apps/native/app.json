@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "scheme": "fumadocs-learning",
+    "userInterfaceStyle": "automatic",
+    "orientation": "default",
+    "web": {
+      "bundler": "metro"
+    },
+    "name": "fumadocs-learning",
+    "slug": "fumadocs-learning",
+    "plugins": ["expo-font"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
