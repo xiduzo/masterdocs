@@ -10,6 +10,14 @@
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
+    "@fumadocs-learning/api": "workspace:*",
+    "@fumadocs-learning/auth": "workspace:*",
+    "@fumadocs-learning/db": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "@tanstack/react-query": "catalog:",
+    "@trpc/client": "catalog:",
+    "@trpc/tanstack-react-query": "catalog:",
+    "better-auth": "catalog:",
     "fumadocs-core": "16.7.10",
     "fumadocs-mdx": "14.2.11",
     "fumadocs-ui": "16.7.10",

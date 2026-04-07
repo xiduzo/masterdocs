@@ -110,24 +110,24 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 7. Implement auth integration for Fumadocs app
-  - [~] 7.1 Configure better-auth email OTP plugin in `packages/auth/src/index.ts`
+- [x] 7. Implement auth integration for Fumadocs app
+  - [x] 7.1 Configure better-auth email OTP plugin in `packages/auth/src/index.ts`
   - Add `emailOTP` plugin to the better-auth config
   - Remove or disable `emailAndPassword` (OTP-only per requirements)
   - Configure username to default to email on account creation
   - _Requirements: 3.1, 3.2, 3.3_
 
-  - [~] 7.2 Set up auth client in `apps/fumadocs`
+  - [x] 7.2 Set up auth client in `apps/fumadocs`
   - Create `apps/fumadocs/src/lib/auth-client.ts` using better-auth client with email OTP plugin
   - Provide `useSession()` hook access for client components
   - _Requirements: 3.1, 3.7_
 
-  - [~] 7.3 Create OTP sign-in UI components
+  - [x] 7.3 Create OTP sign-in UI components
   - Build email input → OTP input flow as client components
   - Integrate sign-in/sign-out controls into the Fumadocs layout header (update `apps/fumadocs/src/lib/layout.shared.tsx` or layout files)
   - _Requirements: 3.1, 3.2_
 
-  - [~] 7.4 Create profile page for username update
+  - [x] 7.4 Create profile page for username update
   - Add `/profile` route in `apps/fumadocs` where authenticated students can update their username
   - _Requirements: 3.4_
 
@@ -136,23 +136,23 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Test that username can be updated via profile page
   - _Requirements: 3.3, 3.4_
 
-- [ ] 8. Implement Skill and SkillToggle components
-  - [~] 8.1 Create `<Skill>` RSC component in `apps/fumadocs/src/components/skill.tsx`
+- [x] 8. Implement Skill and SkillToggle components
+  - [x] 8.1 Create `<Skill>` RSC component in `apps/fumadocs/src/components/skill.tsx`
   - Async server component that queries DB for authenticated user's completion state via Drizzle
   - Passes `initialCompleted` and `isAuthenticated` to the client child component
   - _Requirements: 2.1, 2.3, 4.3_
 
-  - [~] 8.2 Create `<SkillToggle>` client component in `apps/fumadocs/src/components/skill-toggle.client.tsx`
+  - [x] 8.2 Create `<SkillToggle>` client component in `apps/fumadocs/src/components/skill-toggle.client.tsx`
   - Renders checkbox with skill label
   - Optimistic UI toggle → tRPC `toggleSkill` mutation → revert on failure with error toast
   - Disabled state with sign-in prompt when not authenticated
   - _Requirements: 2.3, 3.5, 3.6, 4.4_
 
-  - [~] 8.3 Register `<Skill>` in MDX components map
+  - [x] 8.3 Register `<Skill>` in MDX components map
   - Add `Skill` to `getMDXComponents()` in `apps/fumadocs/src/components/mdx.tsx`
   - _Requirements: 2.1_
 
-  - [~] 8.4 Set up tRPC client in `apps/fumadocs` for client-side mutations
+  - [x] 8.4 Set up tRPC client in `apps/fumadocs` for client-side mutations
   - Create tRPC client configuration for the Fumadocs Next.js app to call the backend API
   - Wire up React Query provider for tRPC in the app layout
   - _Requirements: 4.1, 4.2_
@@ -168,13 +168,13 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Test sign-in prompt on interaction when not authenticated
   - _Requirements: 4.4, 3.5, 3.6_
 
-- [ ] 9. Implement ProgressBar components
-  - [~] 9.1 Create `<ProgressBar>` RSC component in `apps/fumadocs/src/components/progress-bar.tsx`
+- [x] 9. Implement ProgressBar components
+  - [x] 9.1 Create `<ProgressBar>` RSC component in `apps/fumadocs/src/components/progress-bar.tsx`
   - Async server component that queries DB for completed skill count within given skillIds
   - Passes completed/total/isAuthenticated to client child
   - _Requirements: 5.1, 5.2, 5.3_
 
-  - [~] 9.2 Create `<ProgressBarClient>` client component in `apps/fumadocs/src/components/progress-bar.client.tsx`
+  - [x] 9.2 Create `<ProgressBarClient>` client component in `apps/fumadocs/src/components/progress-bar.client.tsx`
   - Renders horizontal progress bar with percentage
   - Shows 0% with "Sign in to track progress" when not authenticated
   - Supports refresh after skill toggle via `router.refresh()` or tRPC re-fetch
@@ -185,12 +185,12 @@ Incrementally build the interactive learning roadmap system on top of the existi
   - Generate roadmap structures with skill IDs and completed subsets. Verify topic/track/roadmap ratios are correct and in [0, 1].
   - **Validates: Requirements 5.1, 5.2, 5.3, 8.2**
 
-- [~] 10. Checkpoint — Verify components
+- [x] 10. Checkpoint — Verify components
   - Ensure all tests pass, ask the user if questions arise.
 
 
 - [ ] 11. Build Roadmap pages and navigation
-  - [~] 11.1 Create Roadmap index page
+  - [-] 11.1 Create Roadmap index page
   - Add `/roadmaps` route in `apps/fumadocs` listing all roadmaps with name, description, and link to each roadmap view
   - Use `getAllRoadmaps()` utility from step 5.1
   - _Requirements: 7.1, 7.2_
