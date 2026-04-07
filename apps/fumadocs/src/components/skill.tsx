@@ -19,7 +19,7 @@ export async function Skill({ id, label }: SkillProps) {
 
     const res = await fetch(
       `${SERVER_URL}/trpc/progress.getSkillStates?input=${encodeURIComponent(
-        JSON.stringify({ json: { skillIds: [id] } }),
+        JSON.stringify({ skillIds: [id] }),
       )}`,
       {
         headers: { cookie },
@@ -29,7 +29,7 @@ export async function Skill({ id, label }: SkillProps) {
 
     if (res.ok) {
       const json = await res.json();
-      const data = json?.result?.data?.json;
+      const data = json?.result?.data;
       if (data) {
         isAuthenticated = data.isAuthenticated;
         completed = data.completedIds?.includes(id) ?? false;

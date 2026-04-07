@@ -166,7 +166,7 @@ export function getTopicNavigation(
     prev:
       index > 0
         ? { title: allTopics[index - 1].title, url: allTopics[index - 1].url }
-        : undefined,
+        : { title: structure.title, url: `/docs/${roadmapSlug}` },
     next:
       index < allTopics.length - 1
         ? { title: allTopics[index + 1].title, url: allTopics[index + 1].url }
