@@ -4,6 +4,13 @@ import {
   CollapsibleTrigger,
 } from "@fumadocs-learning/ui/components/collapsible";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuTrigger,
+} from "@fumadocs-learning/ui/components/dropdown-menu";
+import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
@@ -21,7 +28,7 @@ import {
 import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, ClockAlert, File, Folder, FolderOpen, Plus } from "lucide-react";
+import { ChevronRight, ClockAlert, File, Folder, FolderOpen, FolderPlus, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -58,6 +65,11 @@ type FolderNode = {
 type TreeNode = FileNode | FolderNode;
 
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
+
+function hasPendingDescendant(node: TreeNode): boolean {
+  if (node.type === "file") return node.state === "pending_review";
+  return node.children.some(hasPendingDescendant);
+}
 
 // ─── Data transform ───────────────────────────────────────────────────────────
 
@@ -180,12 +192,159 @@ function InlineCreateInput({
   );
 }
 
+// ─── Inline create: new roadmap ───────────────────────────────────────────────
+
+function InlineCreateRoadmap({ onDone }: { onDone: () => void }) {
+  const [slug, setSlug] = useState("");
+  const [title, setTitle] = useState("");
+  const queryClient = useQueryClient();
+  const slugRef = useRef<HTMLInputElement>(null);
+
+  const createMutation = useMutation(trpc.content.createRoadmap.mutationOptions());
+
+  const slugValid = slug.length > 0 && SLUG_PATTERN.test(slug);
+  const canSubmit = slugValid && title.trim().length > 0 && !createMutation.isPending;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    createMutation.mutate(
+      { slug: slug.trim(), title: title.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Roadmap created");
+          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+          onDone();
+        },
+        onError: (err) => {
+          toast.error(err.message);
+          slugRef.current?.focus();
+        },
+      },
+    );
+  };
+
+  return (
+    <SidebarMenuItem>
+      <div className="flex flex-col gap-1 rounded-md px-2 py-1 text-sm">
+        <div className="flex items-center gap-2">
+          <Folder className="size-4 shrink-0 text-sidebar-foreground/40" />
+          <input
+            ref={slugRef}
+            autoFocus
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onDone();
+            }}
+            placeholder="roadmap-slug"
+            disabled={createMutation.isPending}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+          />
+        </div>
+        <div className="flex items-center gap-2 pl-6">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+              if (e.key === "Escape") onDone();
+            }}
+            onBlur={() => {
+              if (!slug && !title && !createMutation.isPending) onDone();
+            }}
+            placeholder="Title"
+            disabled={createMutation.isPending}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+          />
+        </div>
+      </div>
+    </SidebarMenuItem>
+  );
+}
+
+// ─── Inline create: new track ─────────────────────────────────────────────────
+
+function InlineCreateTrack({
+  roadmap,
+  onDone,
+}: {
+  roadmap: string;
+  onDone: () => void;
+}) {
+  const [trackSlug, setTrackSlug] = useState("");
+  const [trackTitle, setTrackTitle] = useState("");
+  const queryClient = useQueryClient();
+  const slugRef = useRef<HTMLInputElement>(null);
+
+  const createMutation = useMutation(trpc.content.createTrack.mutationOptions());
+
+  const slugValid = trackSlug.length > 0 && SLUG_PATTERN.test(trackSlug);
+  const canSubmit = slugValid && trackTitle.trim().length > 0 && !createMutation.isPending;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    createMutation.mutate(
+      { roadmap, trackSlug: trackSlug.trim(), trackTitle: trackTitle.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Sub-section created");
+          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+          onDone();
+        },
+        onError: (err) => {
+          toast.error(err.message);
+          slugRef.current?.focus();
+        },
+      },
+    );
+  };
+
+  return (
+    <SidebarMenuItem>
+      <div className="flex flex-col gap-1 rounded-md px-2 py-1 text-sm">
+        <div className="flex items-center gap-2">
+          <FolderPlus className="size-4 shrink-0 text-sidebar-foreground/40" />
+          <input
+            ref={slugRef}
+            autoFocus
+            value={trackSlug}
+            onChange={(e) => setTrackSlug(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onDone();
+            }}
+            placeholder="section-slug"
+            disabled={createMutation.isPending}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+          />
+        </div>
+        <div className="flex items-center gap-2 pl-6">
+          <input
+            value={trackTitle}
+            onChange={(e) => setTrackTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+              if (e.key === "Escape") onDone();
+            }}
+            onBlur={() => {
+              if (!trackSlug && !trackTitle && !createMutation.isPending) onDone();
+            }}
+            placeholder="Section Title"
+            disabled={createMutation.isPending}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+          />
+        </div>
+      </div>
+    </SidebarMenuItem>
+  );
+}
+
 // ─── Components ───────────────────────────────────────────────────────────────
 
 export function ContentSidebar() {
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
   const { data: pending } = useQuery(trpc.content.listPending.queryOptions());
   const tree = data ? buildTree(data) : [];
+  const [isCreatingRoadmap, setIsCreatingRoadmap] = useState(false);
 
   return (
     <>
@@ -197,15 +356,27 @@ export function ContentSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Files</SidebarGroupLabel>
+          <div className="group/roadmaps-label relative flex items-center">
+            <SidebarGroupLabel className="flex-1">Roadmaps</SidebarGroupLabel>
+            <button
+              onClick={() => setIsCreatingRoadmap(true)}
+              title="New roadmap"
+              className="mr-2 rounded-md p-0.5 text-sidebar-foreground/50 opacity-0 transition-opacity hover:text-sidebar-foreground group-hover/roadmaps-label:opacity-100"
+            >
+              <Plus className="size-4" />
+            </button>
+          </div>
           <SidebarGroupContent>
             {isLoading ? (
               <SidebarSkeleton />
             ) : (
               <SidebarMenu>
                 {tree.map((node, i) => (
-                  <Tree key={i} item={node} />
+                  <Tree key={i} item={node} isRoadmapLevel />
                 ))}
+                {isCreatingRoadmap && (
+                  <InlineCreateRoadmap onDone={() => setIsCreatingRoadmap(false)} />
+                )}
               </SidebarMenu>
             )}
           </SidebarGroupContent>
@@ -232,9 +403,9 @@ export function ContentSidebar() {
 }
 
 /** Recursive tree node — dispatches to FileItem or FolderItem */
-function Tree({ item }: { item: TreeNode }) {
+function Tree({ item, isRoadmapLevel = false }: { item: TreeNode; isRoadmapLevel?: boolean }) {
   if (item.type === "file") return <FileItem item={item} />;
-  return <FolderItem item={item} />;
+  return <FolderItem item={item} isRoadmapLevel={isRoadmapLevel} />;
 }
 
 function FileItem({ item }: { item: FileNode }) {
@@ -259,20 +430,26 @@ function FileItem({ item }: { item: FileNode }) {
         <span>{item.name}</span>
       </SidebarMenuButton>
       {item.state === "pending_review" && (
-        <SidebarMenuBadge className="text-amber-500">●</SidebarMenuBadge>
+        <SidebarMenuBadge className="text-amber-500!">●</SidebarMenuBadge>
       )}
     </SidebarMenuItem>
   );
 }
 
-function FolderItem({ item }: { item: FolderNode }) {
+function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoadmapLevel?: boolean }) {
   const [open, setOpen] = useState(item.defaultOpen ?? false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingFile, setIsCreatingFile] = useState(false);
+  const [isCreatingTrack, setIsCreatingTrack] = useState(false);
+  const hasPending = item.children.some(hasPendingDescendant);
 
-  const handleAddClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleAddFile = () => {
     setOpen(true);
-    setIsCreating(true);
+    setIsCreatingFile(true);
+  };
+
+  const handleAddTrack = () => {
+    setOpen(true);
+    setIsCreatingTrack(true);
   };
 
   return (
@@ -288,23 +465,64 @@ function FolderItem({ item }: { item: FolderNode }) {
             {open ? <FolderOpen /> : <Folder />}
             <span>{item.name}</span>
           </CollapsibleTrigger>
-          <SidebarMenuAction
-            onClick={handleAddClick}
-            title="New file"
-            className="opacity-0 group-hover/folder-row:opacity-100"
-          >
-            <Plus />
-          </SidebarMenuAction>
+          {hasPending && (
+            <SidebarMenuBadge className="text-amber-500! group-hover/folder-row:opacity-0">
+              ●
+            </SidebarMenuBadge>
+          )}
+          {isRoadmapLevel ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <SidebarMenuAction
+                    title="Add to roadmap"
+                    className="opacity-0 group-hover/folder-row:opacity-100"
+                  />
+                }
+              >
+                <Plus />
+              </DropdownMenuTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuContent side="right" align="start">
+                  <DropdownMenuItem onClick={handleAddFile}>
+                    <File className="size-4" />
+                    New file
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleAddTrack}>
+                    <FolderPlus className="size-4" />
+                    New sub-section
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenuPortal>
+            </DropdownMenu>
+          ) : (
+            <SidebarMenuAction
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddFile();
+              }}
+              title="New file"
+              className="opacity-0 group-hover/folder-row:opacity-100"
+            >
+              <Plus />
+            </SidebarMenuAction>
+          )}
         </div>
         <CollapsibleContent>
           <SidebarMenuSub className="mr-0 pr-0">
             {item.children.map((child, i) => (
               <Tree key={i} item={child} />
             ))}
-            {isCreating && (
+            {isCreatingFile && (
               <InlineCreateInput
                 roadmap={item.name}
-                onDone={() => setIsCreating(false)}
+                onDone={() => setIsCreatingFile(false)}
+              />
+            )}
+            {isCreatingTrack && (
+              <InlineCreateTrack
+                roadmap={item.name}
+                onDone={() => setIsCreatingTrack(false)}
               />
             )}
           </SidebarMenuSub>

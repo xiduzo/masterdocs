@@ -572,4 +572,172 @@ export const contentRouter = router({
         }
       }
     }),
+
+  /** Create an entirely new roadmap (directory + scaffolding files). */
+  createRoadmap: adminProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        title: z.string().min(1),
+        description: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!isValidSlug(input.slug)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Slug must contain only lowercase letters, numbers, and hyphens",
+        });
+      }
+
+      const github = createGitHubService();
+      const contentBase = "apps/fumadocs/content/docs";
+
+      // Check if the roadmap directory already exists
+      try {
+        await github.getDirectoryTree(`${contentBase}/${input.slug}`);
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Roadmap already exists",
+        });
+      } catch (err) {
+        if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
+        // "not found" is expected — continue
+        if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+      }
+
+      const branchName = `content/roadmap-${input.slug}-${Date.now()}`;
+      const mainSha = await github.getMainHeadSha();
+      await github.createBranch(branchName, mainSha);
+
+      // 1. content/roadmaps/{slug}.mdx — roadmap metadata
+      const roadmapMdx = serializeMdx(
+        { title: input.title, description: input.description },
+        "",
+      );
+      await github.createOrUpdateFile({
+        path: `apps/fumadocs/content/roadmaps/${input.slug}.mdx`,
+        content: roadmapMdx,
+        message: `Create roadmap metadata: ${input.title}`,
+        branch: branchName,
+      });
+
+      // 2. content/docs/{slug}/index.mdx — landing page
+      const indexMdx = serializeMdx(
+        { title: input.title, description: input.description },
+        "",
+      );
+      await github.createOrUpdateFile({
+        path: `${contentBase}/${input.slug}/index.mdx`,
+        content: indexMdx,
+        message: `Create roadmap index: ${input.title}`,
+        branch: branchName,
+      });
+
+      // 3. content/docs/{slug}/meta.json — page ordering
+      const metaJson = JSON.stringify(
+        { title: input.title, pages: [] },
+        null,
+        2,
+      ) + "\n";
+      await github.createOrUpdateFile({
+        path: `${contentBase}/${input.slug}/meta.json`,
+        content: metaJson,
+        message: `Create roadmap meta.json: ${input.title}`,
+        branch: branchName,
+      });
+
+      // 4. PR + change record (use index.mdx as the tracked file)
+      const pr = await github.createPullRequest({
+        title: `New roadmap: ${input.title}`,
+        body: `Created new roadmap: ${input.slug}`,
+        head: branchName,
+        base: "main",
+      });
+
+      await db.insert(changeRecords).values({
+        userId: ctx.session.user.id,
+        filePath: `${contentBase}/${input.slug}/index.mdx`,
+        branchName,
+        prNumber: pr.number,
+        baseCommitSha: mainSha,
+      });
+
+      return { prNumber: pr.number, branchName };
+    }),
+
+  /** Create a new track (sub-section) inside a roadmap by creating its first topic file. */
+  createTrack: adminProcedure
+    .input(
+      z.object({
+        roadmap: z.string(),
+        trackSlug: z.string(),
+        trackTitle: z.string().min(1),
+        trackOrder: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      // The track slug is used as the first topic file name
+      const fileSlug = input.trackSlug;
+
+      if (!isValidSlug(fileSlug)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Slug must contain only lowercase letters, numbers, and hyphens",
+        });
+      }
+
+      const github = createGitHubService();
+      const filePath = `apps/fumadocs/content/docs/${input.roadmap}/${fileSlug}.mdx`;
+
+      // Check the file doesn't already exist
+      try {
+        await github.getFileContent(filePath);
+        throw new TRPCError({ code: "CONFLICT", message: "File already exists" });
+      } catch (err) {
+        if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
+        if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+      }
+
+      const frontmatter = {
+        title: input.trackTitle
+          .split(" ")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" "),
+        roadmap: input.roadmap,
+        track: input.trackSlug,
+        trackTitle: input.trackTitle,
+        trackOrder: input.trackOrder,
+        topicOrder: 1,
+      };
+
+      const mdxContent = serializeMdx(frontmatter, "");
+
+      const branchName = `content/${fileSlug}-${Date.now()}`;
+      const mainSha = await github.getMainHeadSha();
+      await github.createBranch(branchName, mainSha);
+      await github.createOrUpdateFile({
+        path: filePath,
+        content: mdxContent,
+        message: `Create new track: ${input.trackTitle}`,
+        branch: branchName,
+      });
+
+      const pr = await github.createPullRequest({
+        title: `New track: ${input.trackTitle}`,
+        body: `Created new track in ${input.roadmap}: ${input.trackTitle}`,
+        head: branchName,
+        base: "main",
+      });
+
+      await db.insert(changeRecords).values({
+        userId: ctx.session.user.id,
+        filePath,
+        branchName,
+        prNumber: pr.number,
+        baseCommitSha: mainSha,
+      });
+
+      return { prNumber: pr.number, branchName };
+    }),
 });

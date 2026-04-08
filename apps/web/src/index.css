@@ -1,2 +1,47 @@
 @import "@fumadocs-learning/ui/globals.css";
 @plugin "@tailwindcss/typography";
+
+/* ── MDXEditor dark theme ─────────────────────────────────────────────── */
+.dark-theme [class*="_editorRoot"] {
+  --baseBase: #09090b;
+  --baseBgSubtle: #18181b;
+  --baseBg: #27272a;
+  --baseBgHover: #3f3f46;
+  --baseBgActive: #52525b;
+  --baseLine: #3f3f46;
+  --baseBorder: #52525b;
+  --baseBorderHover: #71717a;
+  --baseSolid: #a1a1aa;
+  --baseSolidHover: #d4d4d8;
+  --baseText: #e4e4e7;
+  --baseTextContrast: #fafafa;
+  --basePageBg: #09090b;
+
+  --accentBase: #172554;
+  --accentBgSubtle: #1e3a8a;
+  --accentBg: #1d4ed8;
+  --accentBgHover: #2563eb;
+  --accentBgActive: #3b82f6;
+  --accentLine: #60a5fa;
+  --accentBorder: #3b82f6;
+  --accentBorderHover: #60a5fa;
+  --accentSolid: #3b82f6;
+  --accentSolidHover: #60a5fa;
+  --accentText: #93c5fd;
+  --accentTextContrast: #dbeafe;
+
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  color: var(--baseText);
+  background: var(--basePageBg);
+}
+
+.dark-theme .mdxeditor-toolbar {
+  border-bottom: 1px solid #27272a;
+  background: #18181b;
+}
+
+.dark-theme .mdxeditor {
+  border: 1px solid #27272a;
+  border-radius: 0.375rem;
+}

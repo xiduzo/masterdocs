@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import type { MDXEditorMethods } from "@mdxeditor/editor";
 
 import type { MdxFrontmatter } from "@fumadocs-learning/api/lib/mdx";
 import { Alert, AlertDescription, AlertTitle } from "@fumadocs-learning/ui/components/alert";
@@ -12,12 +13,10 @@ import { Separator } from "@fumadocs-learning/ui/components/separator";
 import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
 import { SidebarTrigger } from "@fumadocs-learning/ui/components/sidebar";
 
-import {
-  BodyEditor,
-  type BodyEditorHandle,
-} from "@/components/content/body-editor";
+const MdxContentEditor = lazy(() =>
+  import("@/components/content/mdx-editor").then((m) => ({ default: m.ContentEditor })),
+);
 import { FrontmatterForm } from "@/components/content/frontmatter-form";
-import { PreviewPanel } from "@/components/content/preview-panel";
 import { trpc } from "@/utils/trpc";
 
 const searchSchema = z.object({
@@ -33,7 +32,7 @@ function ContentEditor() {
   const { roadmap, slug } = Route.useParams();
   const { fromBranch } = Route.useSearch();
   const queryClient = useQueryClient();
-  const bodyEditorRef = useRef<BodyEditorHandle>(null);
+  const editorRef = useRef<MDXEditorMethods>(null);
 
   const { data, isLoading, error } = useQuery(
     trpc.content.get.queryOptions({ roadmap, slug, fromBranch }),
@@ -41,7 +40,6 @@ function ContentEditor() {
 
   const [frontmatter, setFrontmatter] = useState<MdxFrontmatter | null>(null);
   const [body, setBody] = useState<string | null>(null);
-  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
   const [initializedFor, setInitializedFor] = useState<string | null>(null);
   const fileKey = `${roadmap}/${slug}`;
@@ -158,24 +156,6 @@ function ContentEditor() {
               Pending Review
             </Badge>
           )}
-          <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5">
-            <Button
-              size="xs"
-              variant={mode === "edit" ? "secondary" : "ghost"}
-              className="h-6 px-2 text-xs"
-              onClick={() => setMode("edit")}
-            >
-              Edit
-            </Button>
-            <Button
-              size="xs"
-              variant={mode === "preview" ? "secondary" : "ghost"}
-              className="h-6 px-2 text-xs"
-              onClick={() => setMode("preview")}
-            >
-              Preview
-            </Button>
-          </div>
         </div>
 
         {/* Conflict warning */}
@@ -188,17 +168,15 @@ function ContentEditor() {
           </Alert>
         )}
 
-        {/* Editor or preview content */}
+        {/* Editor */}
         <div className="flex-1 overflow-y-auto">
-          {mode === "preview" ? (
-            <div className="h-full p-6">
-              <PreviewPanel body={body} visible={true} />
-            </div>
-          ) : (
-            <div className="space-y-4 p-4">
-              <BodyEditor ref={bodyEditorRef} body={body} onChange={setBody} />
-            </div>
-          )}
+          <Suspense fallback={<div className="p-6"><Skeleton className="h-64 w-full" /></div>}>
+            <MdxContentEditor
+              ref={editorRef}
+              markdown={body}
+              onChange={setBody}
+            />
+          </Suspense>
         </div>
       </div>
 

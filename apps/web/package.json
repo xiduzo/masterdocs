@@ -21,6 +21,7 @@
     "@fumadocs-learning/env": "workspace:*",
     "@fumadocs-learning/ui": "workspace:*",
     "@hookform/resolvers": "^5.1.1",
+    "@mdxeditor/editor": "^3.54.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-form": "catalog:",
