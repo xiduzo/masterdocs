@@ -1,4 +1,13 @@
 import { Button } from "@fumadocs-learning/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@fumadocs-learning/ui/components/card";
+import { Field, FieldError } from "@fumadocs-learning/ui/components/field";
 import { Input } from "@fumadocs-learning/ui/components/input";
 import { Label } from "@fumadocs-learning/ui/components/label";
 import { useForm } from "@tanstack/react-form";
@@ -56,21 +65,24 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   }
 
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <h1 className="mb-6 text-center text-3xl font-bold">Create Account</h1>
+    <Card className="mx-auto w-full mt-10 max-w-md">
+      <CardHeader>
+        <CardTitle className="text-center text-3xl font-bold">Create Account</CardTitle>
+        <CardDescription className="text-center">Sign up for a new account</CardDescription>
+      </CardHeader>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
+      <CardContent>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
           <form.Field name="name">
             {(field) => (
-              <div className="space-y-2">
+              <Field>
                 <Label htmlFor={field.name}>Name</Label>
                 <Input
                   id={field.name}
@@ -79,20 +91,14 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
             )}
           </form.Field>
-        </div>
 
-        <div>
           <form.Field name="email">
             {(field) => (
-              <div className="space-y-2">
+              <Field>
                 <Label htmlFor={field.name}>Email</Label>
                 <Input
                   id={field.name}
@@ -102,20 +108,14 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
             )}
           </form.Field>
-        </div>
 
-        <div>
           <form.Field name="password">
             {(field) => (
-              <div className="space-y-2">
+              <Field>
                 <Label htmlFor={field.name}>Password</Label>
                 <Input
                   id={field.name}
@@ -125,36 +125,31 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
             )}
           </form.Field>
-        </div>
 
-        <form.Subscribe
-          selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign Up"}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
+          <form.Subscribe
+            selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+          >
+            {({ canSubmit, isSubmitting }) => (
+              <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Sign Up"}
+              </Button>
+            )}
+          </form.Subscribe>
+        </form>
+      </CardContent>
 
-      <div className="mt-4 text-center">
+      <CardFooter className="justify-center">
         <Button
           variant="link"
           onClick={onSwitchToSignIn}
-          className="text-indigo-600 hover:text-indigo-800"
         >
           Already have an account? Sign In
         </Button>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 }

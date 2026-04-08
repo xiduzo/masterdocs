@@ -1,0 +1,250 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+import { z } from "zod";
+
+import type { MdxFrontmatter } from "@fumadocs-learning/api/lib/mdx";
+import { Alert, AlertDescription, AlertTitle } from "@fumadocs-learning/ui/components/alert";
+import { Badge } from "@fumadocs-learning/ui/components/badge";
+import { Button } from "@fumadocs-learning/ui/components/button";
+import { Separator } from "@fumadocs-learning/ui/components/separator";
+import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+
+import {
+  BodyEditor,
+  type BodyEditorHandle,
+} from "@/components/content/body-editor";
+import { ComponentInserter } from "@/components/content/component-inserter";
+import { FrontmatterForm } from "@/components/content/frontmatter-form";
+import { PreviewPanel } from "@/components/content/preview-panel";
+import { trpc } from "@/utils/trpc";
+
+const searchSchema = z.object({
+  fromBranch: z.boolean().optional(),
+});
+
+export const Route = createFileRoute("/admin/content/$roadmap/$slug")({
+  component: ContentEditor,
+  validateSearch: searchSchema,
+});
+
+function ContentEditor() {
+  const { roadmap, slug } = Route.useParams();
+  const { fromBranch } = Route.useSearch();
+  const queryClient = useQueryClient();
+  const bodyEditorRef = useRef<BodyEditorHandle>(null);
+
+  // Fetch file data
+  const {
+    data,
+    isLoading,
+    error,
+  } = useQuery(trpc.content.get.queryOptions({ roadmap, slug, fromBranch }));
+
+  // Local editing state — initialized from fetched data
+  const [frontmatter, setFrontmatter] = useState<MdxFrontmatter | null>(null);
+  const [body, setBody] = useState<string | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(true);
+
+  // Sync fetched data into local state when it arrives (only on first load)
+  const [initializedFor, setInitializedFor] = useState<string | null>(null);
+  const fileKey = `${roadmap}/${slug}`;
+  if (data && initializedFor !== fileKey) {
+    setFrontmatter(data.frontmatter);
+    setBody(data.body);
+    setInitializedFor(fileKey);
+  }
+
+  // Conflict check — only when there's a pending change record
+  const changeRecordId = data?.changeRecord?.id;
+  const conflictQuery = useQuery({
+    ...trpc.content.checkConflict.queryOptions({
+      changeRecordId: changeRecordId!,
+    }),
+    enabled: !!changeRecordId,
+  });
+
+  // Mutations
+  const submitMutation = useMutation(trpc.content.submit.mutationOptions());
+  const publishMutation = useMutation(trpc.content.publish.mutationOptions());
+  const discardMutation = useMutation(trpc.content.discard.mutationOptions());
+
+  const invalidateQueries = () => {
+    queryClient.invalidateQueries({ queryKey: trpc.content.get.queryKey() });
+    queryClient.invalidateQueries({ queryKey: trpc.content.list.queryKey() });
+  };
+
+  const handleSubmit = () => {
+    if (!frontmatter || body === null) return;
+    submitMutation.mutate(
+      {
+        roadmap,
+        slug,
+        frontmatter,
+        body,
+        fileSha: data?.fileSha,
+      },
+      {
+        onSuccess: (result) => {
+          toast.success(`Submitted — PR #${result.prNumber} created`);
+          invalidateQueries();
+        },
+        onError: (err) => {
+          toast.error(`Submit failed: ${err.message}`);
+        },
+      },
+    );
+  };
+
+  const handlePublish = () => {
+    if (!changeRecordId) return;
+    publishMutation.mutate(
+      { changeRecordId },
+      {
+        onSuccess: () => {
+          toast.success("Published successfully");
+          invalidateQueries();
+        },
+        onError: (err) => {
+          toast.error(`Publish failed: ${err.message}`);
+        },
+      },
+    );
+  };
+
+  const handleDiscard = () => {
+    if (!changeRecordId) return;
+    discardMutation.mutate(
+      { changeRecordId },
+      {
+        onSuccess: () => {
+          toast.success("Changes discarded");
+          invalidateQueries();
+        },
+        onError: (err) => {
+          toast.error(`Discard failed: ${err.message}`);
+        },
+      },
+    );
+  };
+
+  const handleInsert = (text: string) => {
+    bodyEditorRef.current?.insertAtCursor(text);
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <Alert variant="destructive">
+          <AlertTitle>Failed to load file</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!data || !frontmatter || body === null) return null;
+
+  const isPending = data.state === "pending_review";
+  const hasConflict = conflictQuery.data?.hasConflict === true;
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-6 py-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-semibold">
+            {roadmap}/{slug}
+          </h1>
+          {isPending && (
+            <Badge variant="outline" className="text-amber-600">
+              Pending Review
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setPreviewVisible(!previewVisible)}
+          >
+            {previewVisible ? "Hide Preview" : "Show Preview"}
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={submitMutation.isPending}
+          >
+            {submitMutation.isPending ? "Submitting…" : "Submit"}
+          </Button>
+
+          {isPending && (
+            <>
+              <Button
+                size="sm"
+                onClick={handlePublish}
+                disabled={publishMutation.isPending}
+              >
+                {publishMutation.isPending ? "Publishing…" : "Publish"}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleDiscard}
+                disabled={discardMutation.isPending}
+              >
+                {discardMutation.isPending ? "Discarding…" : "Discard"}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Conflict warning */}
+      {hasConflict && (
+        <Alert variant="destructive" className="mx-6 mt-3">
+          <AlertTitle>Stale content</AlertTitle>
+          <AlertDescription>
+            The main branch has been updated since this change was submitted.
+            The same file was modified — you may need to resolve conflicts before publishing.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Editor area */}
+      <div className="flex flex-1 gap-4 overflow-hidden p-6">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+          <FrontmatterForm
+            frontmatter={frontmatter}
+            onChange={setFrontmatter}
+          />
+
+          <ComponentInserter onInsert={handleInsert} />
+
+          <BodyEditor
+            ref={bodyEditorRef}
+            body={body}
+            onChange={setBody}
+          />
+        </div>
+
+        <PreviewPanel body={body} visible={previewVisible} />
+      </div>
+    </div>
+  );
+}

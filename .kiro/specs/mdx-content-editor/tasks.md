@@ -122,14 +122,14 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
 - [x] 6. Checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Editor UI — Layout, routing, and sidebar
-  - [-] 7.1 Create admin content route layout with auth guard
+- [x] 7. Editor UI — Layout, routing, and sidebar
+  - [x] 7.1 Create admin content route layout with auth guard
     - Create `apps/web/src/routes/admin/content/route.tsx` as a layout route
     - Add `beforeLoad` guard: redirect unauthenticated users to `/login`, show "Access Denied" for non-admin users
     - Render sidebar + `<Outlet />` in a split-pane layout
     - _Requirements: 1.2, 1.3_
 
-  - [~] 7.2 Implement `ContentSidebar` component
+  - [x] 7.2 Implement `ContentSidebar` component
     - Create `apps/web/src/components/content/sidebar.tsx`
     - Fetch content list via `trpc.content.list.useQuery()`
     - Render collapsible roadmap groups with file links
@@ -137,27 +137,27 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
     - Include "New File" button and "Pending Changes" link
     - _Requirements: 3.1, 3.4, 3.5_
 
-  - [~] 7.3 Create content index route
+  - [x] 7.3 Create content index route
     - Create `apps/web/src/routes/admin/content/index.tsx`
     - Display a welcome/instructions view when no file is selected
     - _Requirements: 3.1_
 
-- [ ] 8. Editor UI — File editing interface
-  - [~] 8.1 Implement `ContentEditor` route component
+- [x] 8. Editor UI — File editing interface
+  - [x] 8.1 Implement `ContentEditor` route component
     - Create `apps/web/src/routes/admin/content/$roadmap.$slug.tsx`
     - Fetch file data via `trpc.content.get.useQuery({ roadmap, slug })`
     - Orchestrate `FrontmatterForm`, `BodyEditor`, `PreviewPanel`, and action buttons (Submit, Publish, Discard)
     - Show conflict warning when `checkConflict` detects stale content
     - _Requirements: 3.3, 8.6, 10.4, 10.6, 12.2_
 
-  - [~] 8.2 Implement `FrontmatterForm` component
+  - [x] 8.2 Implement `FrontmatterForm` component
     - Create `apps/web/src/components/content/frontmatter-form.tsx`
     - Render form fields: title (required), description, roadmap, track, trackTitle, trackOrder, topicOrder (all optional)
     - Pre-populate from loaded frontmatter data
     - Validate title is non-empty on change
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-  - [~] 8.3 Implement `BodyEditor` component with CodeMirror
+  - [x] 8.3 Implement `BodyEditor` component with CodeMirror
     - Create `apps/web/src/components/content/body-editor.tsx`
     - Install `@codemirror/view`, `@codemirror/state`, `@codemirror/lang-markdown`, `@codemirror/language` in `apps/web`
     - Set up CodeMirror 6 editor with Markdown syntax highlighting
@@ -167,7 +167,7 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
     - Expose a ref/callback for cursor position (used by ComponentInserter)
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-  - [~] 8.4 Implement `PreviewPanel` component
+  - [x] 8.4 Implement `PreviewPanel` component
     - Create `apps/web/src/components/content/preview-panel.tsx`
     - Install `react-markdown` and `remark-gfm` in `apps/web`
     - Render body content as HTML with standard Markdown formatting
@@ -177,7 +177,7 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
     - Add toggle button to show/hide the preview panel
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-  - [~] 8.5 Implement `ComponentInserter` component
+  - [x] 8.5 Implement `ComponentInserter` component
     - Create `apps/web/src/components/content/component-inserter.tsx`
     - "Insert Skill" button → dialog with `id` and `label` fields (both required)
     - "Insert YouTube" button → dialog with `id` field (required)
@@ -185,15 +185,15 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
     - Validate all required fields are non-empty before insertion
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 9. Editor UI — New file, pending changes, and conflict resolution
-  - [~] 9.1 Implement `NewFileDialog` component
+- [x] 9. Editor UI — New file, pending changes, and conflict resolution
+  - [x] 9.1 Implement `NewFileDialog` component
     - Create `apps/web/src/components/content/new-file-dialog.tsx`
     - Prompt for roadmap directory (select from existing or enter new) and file slug
     - Call `trpc.content.create.useMutation()` on submit
     - On success, navigate to the new file's editor route
     - _Requirements: 9.1, 9.5_
 
-  - [~] 9.2 Implement `PendingChanges` route
+  - [x] 9.2 Implement `PendingChanges` route
     - Create `apps/web/src/routes/admin/content/pending.tsx`
     - List all `change_records` with `pending_review` status
     - Display file path, submitter, timestamp, PR number for each entry
@@ -201,7 +201,7 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
     - Allow discarding a pending change from this view
     - _Requirements: 11.1, 11.2, 11.3, 11.4_
 
-  - [~] 9.3 Implement `ConflictResolver` component
+  - [x] 9.3 Implement `ConflictResolver` component
     - Create `apps/web/src/components/content/conflict-resolver.tsx`
     - Show side-by-side view of main version vs submitted version
     - Provide three resolution options: "Keep my changes", "Use latest from main", "Edit manually"
@@ -209,7 +209,7 @@ Build a GitHub-backed MDX content editor for the web app. Implementation proceed
     - For "Edit manually", load both versions into adjacent panels for manual merging, then re-submit
     - _Requirements: 12.3, 12.4, 12.5, 12.6, 12.7_
 
-- [~] 10. Final checkpoint
+- [x] 10. Final checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

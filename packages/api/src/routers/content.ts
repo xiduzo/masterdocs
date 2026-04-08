@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@fumadocs-learning/db";
+import { user } from "@fumadocs-learning/db/schema/auth";
 import { changeRecords } from "@fumadocs-learning/db/schema/change-records";
 
 import { protectedProcedure, router } from "../index";
@@ -78,6 +79,24 @@ export const contentRouter = router({
     );
 
     return results;
+  }),
+
+  listPending: adminProcedure.query(async () => {
+    const records = await db
+      .select({
+        id: changeRecords.id,
+        filePath: changeRecords.filePath,
+        branchName: changeRecords.branchName,
+        prNumber: changeRecords.prNumber,
+        createdAt: changeRecords.createdAt,
+        submitterName: user.name,
+        submitterEmail: user.email,
+      })
+      .from(changeRecords)
+      .innerJoin(user, eq(changeRecords.userId, user.id))
+      .where(eq(changeRecords.status, "pending_review"));
+
+    return records;
   }),
 
   get: adminProcedure

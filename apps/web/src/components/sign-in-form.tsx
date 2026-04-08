@@ -1,4 +1,13 @@
 import { Button } from "@fumadocs-learning/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@fumadocs-learning/ui/components/card";
+import { Field, FieldError } from "@fumadocs-learning/ui/components/field";
 import { Input } from "@fumadocs-learning/ui/components/input";
 import { Label } from "@fumadocs-learning/ui/components/label";
 import { useForm } from "@tanstack/react-form";
@@ -53,21 +62,24 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
   }
 
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <h1 className="mb-6 text-center text-3xl font-bold">Welcome Back</h1>
+    <Card className="mx-auto w-full mt-10 max-w-md">
+      <CardHeader>
+        <CardTitle className="text-center text-3xl font-bold">Welcome Back</CardTitle>
+        <CardDescription className="text-center">Sign in to your account</CardDescription>
+      </CardHeader>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
+      <CardContent>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
           <form.Field name="email">
             {(field) => (
-              <div className="space-y-2">
+              <Field>
                 <Label htmlFor={field.name}>Email</Label>
                 <Input
                   id={field.name}
@@ -77,20 +89,14 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
             )}
           </form.Field>
-        </div>
 
-        <div>
           <form.Field name="password">
             {(field) => (
-              <div className="space-y-2">
+              <Field>
                 <Label htmlFor={field.name}>Password</Label>
                 <Input
                   id={field.name}
@@ -100,36 +106,31 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
             )}
           </form.Field>
-        </div>
 
-        <form.Subscribe
-          selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign In"}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
+          <form.Subscribe
+            selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+          >
+            {({ canSubmit, isSubmitting }) => (
+              <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Sign In"}
+              </Button>
+            )}
+          </form.Subscribe>
+        </form>
+      </CardContent>
 
-      <div className="mt-4 text-center">
+      <CardFooter className="justify-center">
         <Button
           variant="link"
           onClick={onSwitchToSignUp}
-          className="text-indigo-600 hover:text-indigo-800"
         >
           Need an account? Sign Up
         </Button>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 }

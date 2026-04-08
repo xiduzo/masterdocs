@@ -12,11 +12,16 @@
     "generate-pwa-assets": "pwa-assets-generator"
   },
   "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.0",
     "@fumadocs-learning/api": "workspace:*",
     "@fumadocs-learning/auth": "workspace:*",
     "@fumadocs-learning/env": "workspace:*",
     "@fumadocs-learning/ui": "workspace:*",
     "@hookform/resolvers": "^5.1.1",
+    "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -30,6 +35,8 @@
     "next-themes": "catalog:",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "sonner": "catalog:",
     "vite-plugin-pwa": "^1.0.1",
     "zod": "catalog:"

@@ -12,6 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminContentRouteRouteImport } from './routes/admin/content/route'
+import { Route as AdminContentIndexRouteImport } from './routes/admin/content/index'
+import { Route as AdminContentPendingRouteImport } from './routes/admin/content/pending'
+import { Route as AdminContentRoadmapSlugRouteImport } from './routes/admin/content/$roadmap.$slug'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -28,35 +32,88 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminContentRouteRoute = AdminContentRouteRouteImport.update({
+  id: '/admin/content',
+  path: '/admin/content',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminContentIndexRoute = AdminContentIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminContentRouteRoute,
+} as any)
+const AdminContentPendingRoute = AdminContentPendingRouteImport.update({
+  id: '/pending',
+  path: '/pending',
+  getParentRoute: () => AdminContentRouteRoute,
+} as any)
+const AdminContentRoadmapSlugRoute = AdminContentRoadmapSlugRouteImport.update({
+  id: '/$roadmap/$slug',
+  path: '/$roadmap/$slug',
+  getParentRoute: () => AdminContentRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/content': typeof AdminContentRouteRouteWithChildren
+  '/admin/content/pending': typeof AdminContentPendingRoute
+  '/admin/content/': typeof AdminContentIndexRoute
+  '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/content/pending': typeof AdminContentPendingRoute
+  '/admin/content': typeof AdminContentIndexRoute
+  '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/content': typeof AdminContentRouteRouteWithChildren
+  '/admin/content/pending': typeof AdminContentPendingRoute
+  '/admin/content/': typeof AdminContentIndexRoute
+  '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/admin/content'
+    | '/admin/content/pending'
+    | '/admin/content/'
+    | '/admin/content/$roadmap/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login'
-  id: '__root__' | '/' | '/dashboard' | '/login'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/admin/content/pending'
+    | '/admin/content'
+    | '/admin/content/$roadmap/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/admin/content'
+    | '/admin/content/pending'
+    | '/admin/content/'
+    | '/admin/content/$roadmap/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  AdminContentRouteRoute: typeof AdminContentRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -82,13 +139,57 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/content': {
+      id: '/admin/content'
+      path: '/admin/content'
+      fullPath: '/admin/content'
+      preLoaderRoute: typeof AdminContentRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/content/': {
+      id: '/admin/content/'
+      path: '/'
+      fullPath: '/admin/content/'
+      preLoaderRoute: typeof AdminContentIndexRouteImport
+      parentRoute: typeof AdminContentRouteRoute
+    }
+    '/admin/content/pending': {
+      id: '/admin/content/pending'
+      path: '/pending'
+      fullPath: '/admin/content/pending'
+      preLoaderRoute: typeof AdminContentPendingRouteImport
+      parentRoute: typeof AdminContentRouteRoute
+    }
+    '/admin/content/$roadmap/$slug': {
+      id: '/admin/content/$roadmap/$slug'
+      path: '/$roadmap/$slug'
+      fullPath: '/admin/content/$roadmap/$slug'
+      preLoaderRoute: typeof AdminContentRoadmapSlugRouteImport
+      parentRoute: typeof AdminContentRouteRoute
+    }
   }
 }
+
+interface AdminContentRouteRouteChildren {
+  AdminContentPendingRoute: typeof AdminContentPendingRoute
+  AdminContentIndexRoute: typeof AdminContentIndexRoute
+  AdminContentRoadmapSlugRoute: typeof AdminContentRoadmapSlugRoute
+}
+
+const AdminContentRouteRouteChildren: AdminContentRouteRouteChildren = {
+  AdminContentPendingRoute: AdminContentPendingRoute,
+  AdminContentIndexRoute: AdminContentIndexRoute,
+  AdminContentRoadmapSlugRoute: AdminContentRoadmapSlugRoute,
+}
+
+const AdminContentRouteRouteWithChildren =
+  AdminContentRouteRoute._addFileChildren(AdminContentRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  AdminContentRouteRoute: AdminContentRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
