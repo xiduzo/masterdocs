@@ -6,7 +6,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 
-export const Route = createFileRoute("/dashboard")({
+export const Route = createFileRoute("/_public/dashboard")({
   component: RouteComponent,
   beforeLoad: async () => {
     const session = await authClient.getSession();

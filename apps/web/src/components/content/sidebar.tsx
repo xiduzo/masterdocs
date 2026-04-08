@@ -1,4 +1,3 @@
-import { Button } from "@fumadocs-learning/ui/components/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,6 +11,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -19,12 +19,12 @@ import {
   SidebarRail,
 } from "@fumadocs-learning/ui/components/sidebar";
 import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useMatchRoute } from "@tanstack/react-router";
-import { ChevronRight, File, FilePlus, Folder, FolderOpen, GitPullRequest } from "lucide-react";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, ClockAlert, File, Folder, FolderOpen, Plus } from "lucide-react";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 
-import { NewFileDialog } from "@/components/content/new-file-dialog";
 import { trpc } from "@/utils/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,6 +56,8 @@ type FolderNode = {
 };
 
 type TreeNode = FileNode | FolderNode;
+
+const SLUG_PATTERN = /^[a-z0-9-]+$/;
 
 // ─── Data transform ───────────────────────────────────────────────────────────
 
@@ -112,13 +114,77 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
   });
 }
 
+// ─── Inline create input ──────────────────────────────────────────────────────
+
+function InlineCreateInput({
+  roadmap,
+  onDone,
+}: {
+  roadmap: string;
+  onDone: () => void;
+}) {
+  const [slug, setSlug] = useState("");
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const createMutation = useMutation(trpc.content.create.mutationOptions());
+
+  const slugValid = slug.length > 0 && SLUG_PATTERN.test(slug);
+
+  const handleSubmit = () => {
+    if (!slugValid || createMutation.isPending) return;
+    const trimmed = slug.trim();
+    createMutation.mutate(
+      { roadmap, slug: trimmed },
+      {
+        onSuccess: () => {
+          toast.success("File created");
+          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+          onDone();
+          navigate({
+            to: "/admin/content/$roadmap/$slug",
+            params: { roadmap, slug: trimmed },
+          });
+        },
+        onError: (err) => {
+          toast.error(err.message);
+          inputRef.current?.focus();
+        },
+      },
+    );
+  };
+
+  return (
+    <SidebarMenuItem>
+      <div className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
+        <File className="size-4 shrink-0 text-sidebar-foreground/40" />
+        <input
+          ref={inputRef}
+          autoFocus
+          value={slug}
+          onChange={(e) => setSlug(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
+            if (e.key === "Escape") onDone();
+          }}
+          onBlur={() => {
+            if (!slug && !createMutation.isPending) onDone();
+          }}
+          placeholder="page-name"
+          disabled={createMutation.isPending}
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+        />
+      </div>
+    </SidebarMenuItem>
+  );
+}
+
 // ─── Components ───────────────────────────────────────────────────────────────
 
 export function ContentSidebar() {
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
-  const [newFileOpen, setNewFileOpen] = useState(false);
-
-  const roadmapNames = data?.map((g) => g.roadmap) ?? [];
+  const { data: pending } = useQuery(trpc.content.listPending.queryOptions());
   const tree = data ? buildTree(data) : [];
 
   return (
@@ -126,18 +192,8 @@ export function ContentSidebar() {
       <SidebarHeader>
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold">Content</span>
-          <Button size="xs" variant="outline" onClick={() => setNewFileOpen(true)}>
-            <FilePlus className="size-3" />
-            New File
-          </Button>
         </div>
       </SidebarHeader>
-
-      <NewFileDialog
-        open={newFileOpen}
-        onOpenChange={setNewFileOpen}
-        roadmaps={roadmapNames}
-      />
 
       <SidebarContent>
         <SidebarGroup>
@@ -160,9 +216,12 @@ export function ContentSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton render={<Link to="/admin/content/pending" />}>
-              <GitPullRequest className="size-4" />
+              <ClockAlert className="size-4" />
               Pending Changes
             </SidebarMenuButton>
+            {!!pending?.length && (
+              <SidebarMenuBadge>{pending.length}</SidebarMenuBadge>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -208,23 +267,46 @@ function FileItem({ item }: { item: FileNode }) {
 
 function FolderItem({ item }: { item: FolderNode }) {
   const [open, setOpen] = useState(item.defaultOpen ?? false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleAddClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpen(true);
+    setIsCreating(true);
+  };
 
   return (
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger render={<SidebarMenuButton />}>
-          <ChevronRight
-            className="transition-transform duration-200"
-            style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
-          />
-          {open ? <FolderOpen /> : <Folder />}
-          <span>{item.name}</span>
-        </CollapsibleTrigger>
+        {/* Wrapper scoped to just this row so hover doesn't bleed into children */}
+        <div className="group/folder-row relative">
+          <CollapsibleTrigger render={<SidebarMenuButton />}>
+            <ChevronRight
+              className="transition-transform duration-200"
+              style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+            />
+            {open ? <FolderOpen /> : <Folder />}
+            <span>{item.name}</span>
+          </CollapsibleTrigger>
+          <SidebarMenuAction
+            onClick={handleAddClick}
+            title="New file"
+            className="opacity-0 group-hover/folder-row:opacity-100"
+          >
+            <Plus />
+          </SidebarMenuAction>
+        </div>
         <CollapsibleContent>
           <SidebarMenuSub className="mr-0 pr-0">
             {item.children.map((child, i) => (
               <Tree key={i} item={child} />
             ))}
+            {isCreating && (
+              <InlineCreateInput
+                roadmap={item.name}
+                onDone={() => setIsCreating(false)}
+              />
+            )}
           </SidebarMenuSub>
         </CollapsibleContent>
       </Collapsible>

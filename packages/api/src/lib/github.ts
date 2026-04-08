@@ -45,6 +45,7 @@ export interface GitHubService {
     head: string;
     base: string;
   }): Promise<{ number: number }>;
+  updatePullRequest(params: { prNumber: number; title: string }): Promise<void>;
   mergePullRequest(prNumber: number, mergeMethod: "merge"): Promise<void>;
   closePullRequest(prNumber: number): Promise<void>;
 
@@ -297,6 +298,22 @@ export function createGitHubService(): GitHubService {
     }
   }
 
+  async function updatePullRequest(params: {
+    prNumber: number;
+    title: string;
+  }): Promise<void> {
+    try {
+      await octokit.pulls.update({
+        owner,
+        repo,
+        pull_number: params.prNumber,
+        title: params.title,
+      });
+    } catch (err) {
+      return wrapOctokitError(err);
+    }
+  }
+
   async function closePullRequest(prNumber: number): Promise<void> {
     try {
       await octokit.pulls.update({
@@ -362,6 +379,7 @@ export function createGitHubService(): GitHubService {
     deleteBranch,
     createOrUpdateFile,
     createPullRequest,
+    updatePullRequest,
     mergePullRequest,
     closePullRequest,
     getCommitSha,

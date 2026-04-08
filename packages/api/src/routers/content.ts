@@ -35,11 +35,11 @@ export const contentRouter = router({
 
     // 2. Fetch all pending change_records in one query
     const pendingRecords = await db
-      .select({ filePath: changeRecords.filePath })
+      .select({ filePath: changeRecords.filePath, branchName: changeRecords.branchName })
       .from(changeRecords)
       .where(eq(changeRecords.status, "pending_review"));
 
-    const pendingPaths = new Set(pendingRecords.map((r) => r.filePath));
+    const pendingMap = new Map(pendingRecords.map((r) => [r.filePath, r.branchName]));
 
     // 3. For each roadmap dir, list MDX files and fetch their titles
     const results = await Promise.all(
@@ -63,7 +63,8 @@ export const contentRouter = router({
             let trackOrder: number | undefined;
             let topicOrder: number | undefined;
             try {
-              const { content } = await github.getFileContent(file.path);
+              const branch = pendingMap.get(file.path);
+              const { content } = await github.getFileContent(file.path, branch);
               const parsed = parseMdx(content);
               title = parsed.frontmatter.title || slug;
               track = parsed.frontmatter.track;
@@ -74,7 +75,7 @@ export const contentRouter = router({
               // If we can't parse the file, fall back to slug as title
             }
 
-            const state = pendingPaths.has(file.path)
+            const state = pendingMap.has(file.path)
               ? ("pending_review" as const)
               : ("published" as const);
 
@@ -131,11 +132,8 @@ export const contentRouter = router({
         )
         .limit(1);
 
-      // Determine which branch to read from
-      const branch =
-        input.fromBranch && pendingRecord
-          ? pendingRecord.branchName
-          : undefined; // undefined = main
+      // Always read from the feature branch when a pending record exists
+      const branch = pendingRecord ? pendingRecord.branchName : undefined;
 
       try {
         const { content, sha } = await github.getFileContent(filePath, branch);
@@ -193,18 +191,41 @@ export const contentRouter = router({
 
       // 1. Serialize MDX from frontmatter + body
       const mdxContent = serializeMdx(input.frontmatter, input.body);
-
-      // 2. Create branch name: content/<slug>-<timestamp>
-      const branchName = `content/${input.slug}-${Date.now()}`;
-
-      // 3. Get main HEAD SHA
-      const mainSha = await github.getMainHeadSha();
-
-      // 4. Create branch from main HEAD
-      await github.createBranch(branchName, mainSha);
-
-      // 5. Commit file to the new branch
       const filePath = `apps/fumadocs/content/docs/${input.roadmap}/${input.slug}.mdx`;
+
+      // 2. Check for an existing pending change record
+      const [existingRecord] = await db
+        .select()
+        .from(changeRecords)
+        .where(
+          and(
+            eq(changeRecords.filePath, filePath),
+            eq(changeRecords.status, "pending_review"),
+          ),
+        )
+        .limit(1);
+
+      if (existingRecord) {
+        // Update the existing branch: fetch current file SHA from branch, then push new content
+        const { sha: currentFileSha } = await github.getFileContent(filePath, existingRecord.branchName);
+        await github.createOrUpdateFile({
+          path: filePath,
+          content: mdxContent,
+          message: `Content update: ${input.frontmatter.title}`,
+          branch: existingRecord.branchName,
+          sha: currentFileSha,
+        });
+        await github.updatePullRequest({
+          prNumber: existingRecord.prNumber,
+          title: `Content update: ${input.frontmatter.title}`,
+        });
+        return { prNumber: existingRecord.prNumber, branchName: existingRecord.branchName, isNew: false };
+      }
+
+      // 3. No existing record — create new branch + PR
+      const branchName = `content/${input.slug}-${Date.now()}`;
+      const mainSha = await github.getMainHeadSha();
+      await github.createBranch(branchName, mainSha);
       await github.createOrUpdateFile({
         path: filePath,
         content: mdxContent,
@@ -212,16 +233,12 @@ export const contentRouter = router({
         branch: branchName,
         sha: input.fileSha,
       });
-
-      // 6. Create PR
       const pr = await github.createPullRequest({
         title: `Content update: ${input.frontmatter.title}`,
         body: `Updated content file: ${filePath}`,
         head: branchName,
         base: "main",
       });
-
-      // 7. Insert change_record in DB
       await db.insert(changeRecords).values({
         userId: ctx.session.user.id,
         filePath,
@@ -229,9 +246,7 @@ export const contentRouter = router({
         prNumber: pr.number,
         baseCommitSha: mainSha,
       });
-
-      // 8. Return PR number and branch name
-      return { prNumber: pr.number, branchName };
+      return { prNumber: pr.number, branchName, isNew: true };
     }),
 
   create: adminProcedure

@@ -53,7 +53,7 @@ export function ConflictResolver({
       { changeRecordId, strategy: "use_main" },
       {
         onSuccess: () => {
-          toast.success("Conflict resolved — using latest from main");
+          toast.success("Conflict resolved — reverted to published version");
           onResolved();
         },
         onError: (err) => {
@@ -76,7 +76,7 @@ export function ConflictResolver({
       },
       {
         onSuccess: () => {
-          toast.success("Conflict resolved — merged content submitted");
+          toast.success("Conflict resolved — combined content submitted");
           onResolved();
         },
         onError: (err) => {
@@ -90,7 +90,7 @@ export function ConflictResolver({
     return (
       <Card>
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Manual Merge</CardTitle>
+          <CardTitle>Combine manually</CardTitle>
           <Button
             size="sm"
             variant="ghost"
@@ -102,10 +102,10 @@ export function ConflictResolver({
 
         <CardContent>
           <div className="grid grid-cols-2 gap-4">
-            {/* Reference: main version (read-only) */}
+            {/* Reference: published version (read-only) */}
             <div className="flex flex-col gap-2">
               <span className="text-xs font-medium text-muted-foreground">
-                Main Version (reference)
+                Published version (reference)
               </span>
               <ScrollArea className="max-h-80">
                 <pre className="rounded border bg-muted/50 p-3 text-xs whitespace-pre-wrap">
@@ -114,10 +114,10 @@ export function ConflictResolver({
               </ScrollArea>
             </div>
 
-            {/* Editable merged content */}
+            {/* Editable combined content */}
             <div className="flex flex-col gap-2">
               <span className="text-xs font-medium text-muted-foreground">
-                Merged Content (editable)
+                Combined content (editable)
               </span>
               <Textarea
                 className="max-h-80 min-h-40 resize-y font-mono text-xs"
@@ -135,7 +135,7 @@ export function ConflictResolver({
             >
               {resolveMutation.isPending
                 ? "Submitting…"
-                : "Submit Merged Content"}
+                : "Submit combined content"}
             </Button>
           </div>
         </CardContent>
@@ -145,13 +145,13 @@ export function ConflictResolver({
 
   return (
     <Alert variant="destructive">
-      <AlertTitle>Conflict Detected</AlertTitle>
+      <AlertTitle>Editing conflict</AlertTitle>
 
       {/* Side-by-side comparison */}
       <div className="mt-3 grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium text-muted-foreground">
-            Main Version
+            Published version
           </span>
           <ScrollArea className="max-h-64">
             <pre className="rounded border bg-muted/50 p-3 text-xs whitespace-pre-wrap">
@@ -187,7 +187,7 @@ export function ConflictResolver({
           onClick={handleUseMain}
           disabled={resolveMutation.isPending}
         >
-          {resolveMutation.isPending ? "Resolving…" : "Use Latest from Main"}
+          {resolveMutation.isPending ? "Resolving…" : "Use published version"}
         </Button>
         <Button
           size="sm"

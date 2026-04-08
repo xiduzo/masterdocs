@@ -16,7 +16,6 @@ import {
   BodyEditor,
   type BodyEditorHandle,
 } from "@/components/content/body-editor";
-import { ComponentInserter } from "@/components/content/component-inserter";
 import { FrontmatterForm } from "@/components/content/frontmatter-form";
 import { PreviewPanel } from "@/components/content/preview-panel";
 import { trpc } from "@/utils/trpc";
@@ -67,6 +66,8 @@ function ContentEditor() {
   const invalidateQueries = () => {
     queryClient.invalidateQueries({ queryKey: trpc.content.get.queryKey() });
     queryClient.invalidateQueries({ queryKey: trpc.content.list.queryKey() });
+    queryClient.invalidateQueries({ queryKey: trpc.content.listPending.queryKey() });
+    queryClient.invalidateQueries({ queryKey: trpc.content.checkConflict.queryKey() });
   };
 
   const handleSubmit = () => {
@@ -75,7 +76,11 @@ function ContentEditor() {
       { roadmap, slug, frontmatter, body, fileSha: data?.fileSha },
       {
         onSuccess: (result) => {
-          toast.success(`Submitted — PR #${result.prNumber} created`);
+          toast.success(
+            result.isNew
+              ? "Submitted for review"
+              : "Submission updated",
+          );
           invalidateQueries();
         },
         onError: (err) => toast.error(`Submit failed: ${err.message}`),
@@ -109,10 +114,6 @@ function ContentEditor() {
         onError: (err) => toast.error(`Discard failed: ${err.message}`),
       },
     );
-  };
-
-  const handleInsert = (text: string) => {
-    bodyEditorRef.current?.insertAtCursor(text);
   };
 
   if (isLoading) {
@@ -180,9 +181,9 @@ function ContentEditor() {
         {/* Conflict warning */}
         {hasConflict && (
           <Alert variant="destructive" className="mx-4 mt-3 shrink-0">
-            <AlertTitle>Stale content</AlertTitle>
+            <AlertTitle>Update available</AlertTitle>
             <AlertDescription>
-              The main branch was updated since this change was submitted — you may need to resolve conflicts before publishing.
+              The published version was updated since you submitted this change — please review the differences before publishing.
             </AlertDescription>
           </Alert>
         )}
@@ -195,7 +196,6 @@ function ContentEditor() {
             </div>
           ) : (
             <div className="space-y-4 p-4">
-              <ComponentInserter onInsert={handleInsert} />
               <BodyEditor ref={bodyEditorRef} body={body} onChange={setBody} />
             </div>
           )}

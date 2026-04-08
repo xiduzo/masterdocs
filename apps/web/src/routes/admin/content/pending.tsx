@@ -2,6 +2,8 @@ import { Badge } from "@fumadocs-learning/ui/components/badge";
 import { Button } from "@fumadocs-learning/ui/components/button";
 import { Card, CardContent } from "@fumadocs-learning/ui/components/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@fumadocs-learning/ui/components/empty";
+import { Separator } from "@fumadocs-learning/ui/components/separator";
+import { SidebarTrigger } from "@fumadocs-learning/ui/components/sidebar";
 import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
@@ -41,6 +43,9 @@ function PendingChanges() {
           queryClient.invalidateQueries({
             queryKey: trpc.content.list.queryKey(),
           });
+          queryClient.invalidateQueries({
+            queryKey: trpc.content.get.queryKey(),
+          });
         },
         onError: (err) => {
           toast.error(`Discard failed: ${err.message}`);
@@ -61,8 +66,13 @@ function PendingChanges() {
   }
 
   return (
-    <div className="p-6">
-      <h1 className="mb-4 text-lg font-semibold">Pending Changes</h1>
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex items-center gap-2 border-b bg-background px-3 py-2">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="h-4" />
+        <h1 className="text-sm font-semibold">Pending Changes</h1>
+      </div>
+      <div className="flex-1 overflow-auto p-6">
 
       {!data || data.length === 0 ? (
         <Empty>
@@ -89,7 +99,7 @@ function PendingChanges() {
                     search={{ fromBranch: true }}
                     className="flex-1 hover:underline"
                   >
-                    <p className="text-sm font-medium">{record.filePath}</p>
+                    <p className="text-sm font-medium">{roadmap} / {slug}</p>
                     <p className="text-xs text-muted-foreground">
                       by {record.submitterName} ·{" "}
                       {new Date(record.createdAt).toLocaleString()}
@@ -97,7 +107,7 @@ function PendingChanges() {
                   </Link>
 
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">PR #{record.prNumber}</Badge>
+                    <Badge variant="outline">Submission #{record.prNumber}</Badge>
                     <Button
                       size="sm"
                       variant="destructive"
@@ -113,6 +123,7 @@ function PendingChanges() {
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -17,8 +18,18 @@ import {
   Italic,
   Link,
   List,
+  Puzzle,
+  Youtube,
 } from "lucide-react";
 import { Button } from "@fumadocs-learning/ui/components/button";
+import { Input } from "@fumadocs-learning/ui/components/input";
+import { Label } from "@fumadocs-learning/ui/components/label";
+import { Field } from "@fumadocs-learning/ui/components/field";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@fumadocs-learning/ui/components/popover";
 
 export interface BodyEditorHandle {
   getCursorPosition: () => number;
@@ -117,6 +128,108 @@ const TOOLBAR_ACTIONS = [
   { label: "List", icon: List, action: (v: EditorView) => insertAtLineStart(v, "- ") },
   { label: "Code", icon: Code, action: (v: EditorView) => insertCodeBlock(v) },
 ] as const;
+
+function SkillInsertPopover({ onInsert }: { onInsert: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [skillId, setSkillId] = useState("");
+  const [skillLabel, setSkillLabel] = useState("");
+
+  const handleSubmit = () => {
+    if (!skillId.trim() || !skillLabel.trim()) return;
+    onInsert(`<Skill id="${skillId.trim()}" label="${skillLabel.trim()}" />`);
+    setSkillId("");
+    setSkillLabel("");
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={<Button variant="ghost" size="icon-xs" title="Insert Skill" aria-label="Insert Skill" />}
+      >
+        <Puzzle />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80">
+        <div className="space-y-2">
+          <Field>
+            <Label className="text-xs">ID</Label>
+            <Input
+              value={skillId}
+              onChange={(e) => setSkillId(e.target.value)}
+              placeholder="e.g. arduino-ide-setup"
+            />
+          </Field>
+          <Field>
+            <Label className="text-xs">Label</Label>
+            <Input
+              value={skillLabel}
+              onChange={(e) => setSkillLabel(e.target.value)}
+              placeholder="e.g. Set up the Arduino IDE"
+            />
+          </Field>
+          <div className="flex justify-end gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={!skillId.trim() || !skillLabel.trim()}
+            >
+              Insert
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function YouTubeInsertPopover({ onInsert }: { onInsert: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [youtubeId, setYoutubeId] = useState("");
+
+  const handleSubmit = () => {
+    if (!youtubeId.trim()) return;
+    onInsert(`<YouTube id="${youtubeId.trim()}" />`);
+    setYoutubeId("");
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={<Button variant="ghost" size="icon-xs" title="Insert YouTube" aria-label="Insert YouTube" />}
+      >
+        <Youtube />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72">
+        <div className="space-y-2">
+          <Field>
+            <Label className="text-xs">Video ID</Label>
+            <Input
+              value={youtubeId}
+              onChange={(e) => setYoutubeId(e.target.value)}
+              placeholder="e.g. ELUF8m24sEo"
+            />
+          </Field>
+          <div className="flex justify-end gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={!youtubeId.trim()}
+            >
+              Insert
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export const BodyEditor = forwardRef<
   BodyEditorHandle,
@@ -219,6 +332,17 @@ export const BodyEditor = forwardRef<
     [],
   );
 
+  const handlePopoverInsert = useCallback((text: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const pos = view.state.selection.main.head;
+    view.dispatch({
+      changes: { from: pos, insert: text },
+      selection: { anchor: pos + text.length },
+    });
+    view.focus();
+  }, []);
+
   return (
     <div className="flex flex-col gap-0 rounded border border-border">
       {/* Toolbar */}
@@ -235,6 +359,9 @@ export const BodyEditor = forwardRef<
             <Icon />
           </Button>
         ))}
+        <div className="mx-1 h-4 w-px bg-border" />
+        <SkillInsertPopover onInsert={handlePopoverInsert} />
+        <YouTubeInsertPopover onInsert={handlePopoverInsert} />
       </div>
 
       {/* Editor container */}
