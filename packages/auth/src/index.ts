@@ -14,6 +14,15 @@ export function createAuth() {
       provider: "pg",
       schema: schema,
     }),
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          defaultValue: "user",
+          input: false,
+        },
+      },
+    },
     trustedOrigins: [
       ...env.CORS_ORIGINS,
       "fumadocs-learning://",

@@ -1,4 +1,5 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
+import { contentRouter } from "./content";
 import { progressRouter } from "./progress";
 
 export const appRouter = router({
@@ -12,5 +13,6 @@ export const appRouter = router({
     };
   }),
   progress: progressRouter,
+  content: contentRouter,
 });
 export type AppRouter = typeof appRouter;
