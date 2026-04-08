@@ -14,10 +14,12 @@
     "@fumadocs-learning/auth": "workspace:*",
     "@fumadocs-learning/db": "workspace:*",
     "@fumadocs-learning/env": "workspace:*",
-    "drizzle-orm": "^0.45.1",
+    "@octokit/rest": "^22.0.1",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.1",
+    "yaml": "^2.8.3",
     "zod": "catalog:"
   },
   "devDependencies": {

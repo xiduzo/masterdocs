@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 import { skillProgress } from "./skill-progress";
+import { changeRecords } from "./change-records";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -8,6 +9,7 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -78,6 +80,7 @@ export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   skillProgress: many(skillProgress),
+  changeRecords: many(changeRecords),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
