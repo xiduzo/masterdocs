@@ -1,5 +1,9 @@
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@fumadocs-learning/ui/components/empty";
-import { Separator } from "@fumadocs-learning/ui/components/separator";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@fumadocs-learning/ui/components/empty";
+import {
+  Sidebar,
+  SidebarInset,
+  SidebarProvider,
+} from "@fumadocs-learning/ui/components/sidebar";
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { ShieldAlertIcon } from "lucide-react";
 
@@ -43,14 +47,13 @@ function ContentLayout() {
   }
 
   return (
-    <div className="flex h-full">
-      <aside className="w-64 overflow-y-auto">
+    <SidebarProvider className="h-full min-h-0 overflow-hidden">
+      <Sidebar>
         <ContentSidebar />
-      </aside>
-      <Separator orientation="vertical" />
-      <main className="flex-1 overflow-y-auto">
+      </Sidebar>
+      <SidebarInset className="overflow-hidden">
         <Outlet />
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

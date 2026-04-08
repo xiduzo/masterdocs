@@ -58,10 +58,18 @@ export const contentRouter = router({
               .replace(/\.mdx$/, "");
 
             let title = slug;
+            let track: string | undefined;
+            let trackTitle: string | undefined;
+            let trackOrder: number | undefined;
+            let topicOrder: number | undefined;
             try {
               const { content } = await github.getFileContent(file.path);
               const parsed = parseMdx(content);
               title = parsed.frontmatter.title || slug;
+              track = parsed.frontmatter.track;
+              trackTitle = parsed.frontmatter.trackTitle;
+              trackOrder = parsed.frontmatter.trackOrder;
+              topicOrder = parsed.frontmatter.topicOrder;
             } catch {
               // If we can't parse the file, fall back to slug as title
             }
@@ -70,7 +78,7 @@ export const contentRouter = router({
               ? ("pending_review" as const)
               : ("published" as const);
 
-            return { slug, title, path: file.path, state };
+            return { slug, title, path: file.path, state, track, trackTitle, trackOrder, topicOrder };
           }),
         );
 

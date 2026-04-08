@@ -10,6 +10,7 @@ import { Badge } from "@fumadocs-learning/ui/components/badge";
 import { Button } from "@fumadocs-learning/ui/components/button";
 import { Separator } from "@fumadocs-learning/ui/components/separator";
 import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+import { SidebarTrigger } from "@fumadocs-learning/ui/components/sidebar";
 
 import {
   BodyEditor,
@@ -35,19 +36,14 @@ function ContentEditor() {
   const queryClient = useQueryClient();
   const bodyEditorRef = useRef<BodyEditorHandle>(null);
 
-  // Fetch file data
-  const {
-    data,
-    isLoading,
-    error,
-  } = useQuery(trpc.content.get.queryOptions({ roadmap, slug, fromBranch }));
+  const { data, isLoading, error } = useQuery(
+    trpc.content.get.queryOptions({ roadmap, slug, fromBranch }),
+  );
 
-  // Local editing state — initialized from fetched data
   const [frontmatter, setFrontmatter] = useState<MdxFrontmatter | null>(null);
   const [body, setBody] = useState<string | null>(null);
-  const [previewVisible, setPreviewVisible] = useState(true);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  // Sync fetched data into local state when it arrives (only on first load)
   const [initializedFor, setInitializedFor] = useState<string | null>(null);
   const fileKey = `${roadmap}/${slug}`;
   if (data && initializedFor !== fileKey) {
@@ -56,7 +52,6 @@ function ContentEditor() {
     setInitializedFor(fileKey);
   }
 
-  // Conflict check — only when there's a pending change record
   const changeRecordId = data?.changeRecord?.id;
   const conflictQuery = useQuery({
     ...trpc.content.checkConflict.queryOptions({
@@ -65,7 +60,6 @@ function ContentEditor() {
     enabled: !!changeRecordId,
   });
 
-  // Mutations
   const submitMutation = useMutation(trpc.content.submit.mutationOptions());
   const publishMutation = useMutation(trpc.content.publish.mutationOptions());
   const discardMutation = useMutation(trpc.content.discard.mutationOptions());
@@ -78,21 +72,13 @@ function ContentEditor() {
   const handleSubmit = () => {
     if (!frontmatter || body === null) return;
     submitMutation.mutate(
-      {
-        roadmap,
-        slug,
-        frontmatter,
-        body,
-        fileSha: data?.fileSha,
-      },
+      { roadmap, slug, frontmatter, body, fileSha: data?.fileSha },
       {
         onSuccess: (result) => {
           toast.success(`Submitted — PR #${result.prNumber} created`);
           invalidateQueries();
         },
-        onError: (err) => {
-          toast.error(`Submit failed: ${err.message}`);
-        },
+        onError: (err) => toast.error(`Submit failed: ${err.message}`),
       },
     );
   };
@@ -106,9 +92,7 @@ function ContentEditor() {
           toast.success("Published successfully");
           invalidateQueries();
         },
-        onError: (err) => {
-          toast.error(`Publish failed: ${err.message}`);
-        },
+        onError: (err) => toast.error(`Publish failed: ${err.message}`),
       },
     );
   };
@@ -122,9 +106,7 @@ function ContentEditor() {
           toast.success("Changes discarded");
           invalidateQueries();
         },
-        onError: (err) => {
-          toast.error(`Discard failed: ${err.message}`);
-        },
+        onError: (err) => toast.error(`Discard failed: ${err.message}`),
       },
     );
   };
@@ -133,7 +115,6 @@ function ContentEditor() {
     bodyEditorRef.current?.insertAtCursor(text);
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="space-y-4 p-6">
@@ -144,7 +125,6 @@ function ContentEditor() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -162,10 +142,13 @@ function ContentEditor() {
   const hasConflict = conflictQuery.data?.hasConflict === true;
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-6 py-3">
-        <div className="flex items-center gap-3">
+    <div className="flex h-full overflow-hidden">
+      {/* ── Center: editor / preview ── */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Sticky header */}
+        <div className="flex items-center gap-2 border-b bg-background px-3 py-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="h-4" />
           <h1 className="text-sm font-semibold">
             {roadmap}/{slug}
           </h1>
@@ -174,19 +157,67 @@ function ContentEditor() {
               Pending Review
             </Badge>
           )}
+          <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5">
+            <Button
+              size="xs"
+              variant={mode === "edit" ? "secondary" : "ghost"}
+              className="h-6 px-2 text-xs"
+              onClick={() => setMode("edit")}
+            >
+              Edit
+            </Button>
+            <Button
+              size="xs"
+              variant={mode === "preview" ? "secondary" : "ghost"}
+              className="h-6 px-2 text-xs"
+              onClick={() => setMode("preview")}
+            >
+              Preview
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setPreviewVisible(!previewVisible)}
-          >
-            {previewVisible ? "Hide Preview" : "Show Preview"}
-          </Button>
+        {/* Conflict warning */}
+        {hasConflict && (
+          <Alert variant="destructive" className="mx-4 mt-3 shrink-0">
+            <AlertTitle>Stale content</AlertTitle>
+            <AlertDescription>
+              The main branch was updated since this change was submitted — you may need to resolve conflicts before publishing.
+            </AlertDescription>
+          </Alert>
+        )}
 
+        {/* Editor or preview content */}
+        <div className="flex-1 overflow-y-auto">
+          {mode === "preview" ? (
+            <div className="h-full p-6">
+              <PreviewPanel body={body} visible={true} />
+            </div>
+          ) : (
+            <div className="space-y-4 p-4">
+              <ComponentInserter onInsert={handleInsert} />
+              <BodyEditor ref={bodyEditorRef} body={body} onChange={setBody} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Right sidebar: properties + actions ── */}
+      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l">
+        {/* Sticky header */}
+        <div className="border-b px-4 py-2">
+          <span className="text-sm font-semibold">Properties</span>
+        </div>
+
+        {/* Scrollable frontmatter */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <FrontmatterForm frontmatter={frontmatter} onChange={setFrontmatter} isIndex={slug === roadmap} />
+        </div>
+
+        {/* Actions pinned to bottom */}
+        <div className="shrink-0 space-y-2 border-t p-4">
           <Button
-            size="sm"
+            className="w-full"
             onClick={handleSubmit}
             disabled={submitMutation.isPending}
           >
@@ -196,14 +227,14 @@ function ContentEditor() {
           {isPending && (
             <>
               <Button
-                size="sm"
+                className="w-full"
                 onClick={handlePublish}
                 disabled={publishMutation.isPending}
               >
                 {publishMutation.isPending ? "Publishing…" : "Publish"}
               </Button>
               <Button
-                size="sm"
+                className="w-full"
                 variant="destructive"
                 onClick={handleDiscard}
                 disabled={discardMutation.isPending}
@@ -213,38 +244,7 @@ function ContentEditor() {
             </>
           )}
         </div>
-      </div>
-
-      {/* Conflict warning */}
-      {hasConflict && (
-        <Alert variant="destructive" className="mx-6 mt-3">
-          <AlertTitle>Stale content</AlertTitle>
-          <AlertDescription>
-            The main branch has been updated since this change was submitted.
-            The same file was modified — you may need to resolve conflicts before publishing.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Editor area */}
-      <div className="flex flex-1 gap-4 overflow-hidden p-6">
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
-          <FrontmatterForm
-            frontmatter={frontmatter}
-            onChange={setFrontmatter}
-          />
-
-          <ComponentInserter onInsert={handleInsert} />
-
-          <BodyEditor
-            ref={bodyEditorRef}
-            body={body}
-            onChange={setBody}
-          />
-        </div>
-
-        <PreviewPanel body={body} visible={previewVisible} />
-      </div>
+      </aside>
     </div>
   );
 }
