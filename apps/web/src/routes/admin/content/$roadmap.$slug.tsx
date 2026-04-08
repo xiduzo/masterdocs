@@ -141,9 +141,9 @@ function ContentEditor() {
   const hasConflict = conflictQuery.data?.hasConflict === true;
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full min-h-0">
       {/* ── Center: editor / preview ── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col min-h-0 min-w-0">
         {/* Sticky header */}
         <div className="flex items-center gap-2 border-b bg-background px-3 py-2">
           <SidebarTrigger className="-ml-1" />
@@ -174,6 +174,7 @@ function ContentEditor() {
             <MdxContentEditor
               ref={editorRef}
               markdown={body}
+              diffMarkdown={data.mainBody}
               onChange={setBody}
             />
           </Suspense>
@@ -181,7 +182,7 @@ function ContentEditor() {
       </div>
 
       {/* ── Right sidebar: properties + actions ── */}
-      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l">
+      <aside className="flex w-72 shrink-0 flex-col min-h-0 border-l">
         {/* Sticky header */}
         <div className="border-b px-4 py-2">
           <span className="text-sm font-semibold">Properties</span>

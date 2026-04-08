@@ -47,11 +47,11 @@ function ContentLayout() {
   }
 
   return (
-    <SidebarProvider className="h-full min-h-0 overflow-hidden">
+    <SidebarProvider className="h-full min-h-0">
       <Sidebar>
         <ContentSidebar />
       </Sidebar>
-      <SidebarInset className="overflow-hidden">
+      <SidebarInset className="min-h-0 min-w-0">
         <Outlet />
       </SidebarInset>
     </SidebarProvider>

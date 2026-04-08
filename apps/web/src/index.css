@@ -45,3 +45,171 @@
   border: 1px solid #27272a;
   border-radius: 0.375rem;
 }
+
+/* ── Slash command menu ───────────────────────────────────────────────── */
+.slash-command-menu {
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  max-height: 320px;
+  width: 260px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.slash-command-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #e4e4e7;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.875rem;
+  line-height: 1.25;
+}
+
+.slash-command-item:hover,
+.slash-command-item-selected {
+  background: #27272a;
+}
+
+.slash-command-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.25rem;
+  background: #27272a;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.slash-command-item-selected .slash-command-icon,
+.slash-command-item:hover .slash-command-icon {
+  background: #3f3f46;
+}
+
+.slash-command-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.slash-command-label {
+  font-weight: 500;
+  color: #fafafa;
+}
+
+.slash-command-desc {
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Inline JSX component editors ─────────────────────────────────────── */
+.jsx-editor-inline {
+  border: 1px solid #3f3f46;
+  border-radius: 0.5rem;
+  background: #18181b;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.jsx-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  background: #27272a;
+  border-bottom: 1px solid #3f3f46;
+}
+
+.jsx-editor-icon {
+  font-size: 0.875rem;
+}
+
+.jsx-editor-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  flex: 1;
+}
+
+.jsx-editor-remove {
+  background: none;
+  border: none;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  line-height: 1;
+}
+
+.jsx-editor-remove:hover {
+  color: #ef4444;
+  background: #27272a;
+}
+
+.jsx-editor-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.jsx-editor-fields--vertical {
+  flex-direction: column;
+}
+
+.jsx-editor-warning {
+  font-size: 0.75rem;
+  color: #f59e0b;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.jsx-editor-input-error {
+  border-color: #ef4444 !important;
+}
+
+.jsx-editor-fields label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 140px;
+}
+
+.jsx-editor-fields label span {
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  font-weight: 500;
+  min-width: 2.5rem;
+}
+
+.jsx-editor-fields input {
+  flex: 1;
+  background: #09090b;
+  border: 1px solid #3f3f46;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  color: #e4e4e7;
+  outline: none;
+  min-width: 0;
+}
+
+.jsx-editor-fields input:focus {
+  border-color: #3b82f6;
+}

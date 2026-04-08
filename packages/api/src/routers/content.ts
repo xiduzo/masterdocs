@@ -8,7 +8,7 @@ import { changeRecords } from "@fumadocs-learning/db/schema/change-records";
 
 import { protectedProcedure, router } from "../index";
 import { createGitHubService } from "../lib/github";
-import { isValidSlug, parseMdx, serializeMdx } from "../lib/mdx";
+import { type MdxFrontmatter, isValidSlug, parseMdx, serializeMdx } from "../lib/mdx";
 
 /**
  * Admin-only procedure — extends protectedProcedure with a role check.
@@ -139,12 +139,28 @@ export const contentRouter = router({
         const { content, sha } = await github.getFileContent(filePath, branch);
         const { frontmatter, body } = parseMdx(content);
 
+        // Fetch the main branch body for diffing
+        let mainBody: string;
+        if (pendingRecord) {
+          try {
+            const { content: mainContent } = await github.getFileContent(filePath);
+            mainBody = parseMdx(mainContent).body;
+          } catch {
+            // File may not exist on main (new file) — that's fine
+            mainBody = "";
+          }
+        } else {
+          // No pending changes — content is already from main
+          mainBody = body;
+        }
+
         const state = pendingRecord ? "pending_review" as const : "published" as const;
 
         return {
           frontmatter,
           body,
           state,
+          mainBody,
           ...(pendingRecord
             ? {
                 changeRecord: {
@@ -254,6 +270,10 @@ export const contentRouter = router({
       z.object({
         roadmap: z.string(),
         slug: z.string(),
+        track: z.string().optional(),
+        trackTitle: z.string().optional(),
+        trackOrder: z.number().optional(),
+        topicOrder: z.number().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -290,11 +310,20 @@ export const contentRouter = router({
         }
       }
 
-      // 4. Create default frontmatter (title derived from slug)
-      const defaultFrontmatter = {
+      // 4. Create default frontmatter (title derived from slug, with track context if provided)
+      const defaultFrontmatter: MdxFrontmatter = {
         title: input.slug
           .replace(/-/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase()),
+        ...(input.track
+          ? {
+              roadmap: input.roadmap,
+              track: input.track,
+              trackTitle: input.trackTitle,
+              trackOrder: input.trackOrder,
+              topicOrder: input.topicOrder,
+            }
+          : {}),
       };
 
       // 5. Serialize MDX with empty body
@@ -647,7 +676,7 @@ export const contentRouter = router({
         branch: branchName,
       });
 
-      // 4. PR + change record (use index.mdx as the tracked file)
+      // 4. PR + auto-merge so the roadmap scaffold appears immediately
       const pr = await github.createPullRequest({
         title: `New roadmap: ${input.title}`,
         body: `Created new roadmap: ${input.slug}`,
@@ -655,13 +684,12 @@ export const contentRouter = router({
         base: "main",
       });
 
-      await db.insert(changeRecords).values({
-        userId: ctx.session.user.id,
-        filePath: `${contentBase}/${input.slug}/index.mdx`,
-        branchName,
-        prNumber: pr.number,
-        baseCommitSha: mainSha,
-      });
+      try {
+        await github.mergePullRequest(pr.number, "merge");
+        await github.deleteBranch(branchName);
+      } catch {
+        // If auto-merge fails (e.g. branch protection), leave PR open
+      }
 
       return { prNumber: pr.number, branchName };
     }),
@@ -730,14 +758,88 @@ export const contentRouter = router({
         base: "main",
       });
 
-      await db.insert(changeRecords).values({
-        userId: ctx.session.user.id,
-        filePath,
-        branchName,
-        prNumber: pr.number,
-        baseCommitSha: mainSha,
-      });
+      try {
+        await github.mergePullRequest(pr.number, "merge");
+        await github.deleteBranch(branchName);
+      } catch {
+        // If auto-merge fails (e.g. branch protection), leave PR open
+      }
 
       return { prNumber: pr.number, branchName };
+    }),
+
+  /** Reorder tracks and/or topics within a roadmap. Commits directly via a temp branch + auto-merge. */
+  reorder: adminProcedure
+    .input(
+      z.object({
+        roadmap: z.string(),
+        items: z.array(
+          z.object({
+            slug: z.string(),
+            trackOrder: z.number().optional(),
+            topicOrder: z.number().optional(),
+          }),
+        ),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const github = createGitHubService();
+      const contentBase = "apps/fumadocs/content/docs";
+
+      const branchName = `content/reorder-${input.roadmap}-${Date.now()}`;
+      const mainSha = await github.getMainHeadSha();
+      await github.createBranch(branchName, mainSha);
+
+      let anyChanged = false;
+
+      for (const item of input.items) {
+        const filePath = `${contentBase}/${input.roadmap}/${item.slug}.mdx`;
+        const { content, sha } = await github.getFileContent(filePath);
+        const parsed = parseMdx(content);
+
+        let changed = false;
+        if (item.trackOrder !== undefined && parsed.frontmatter.trackOrder !== item.trackOrder) {
+          parsed.frontmatter.trackOrder = item.trackOrder;
+          changed = true;
+        }
+        if (item.topicOrder !== undefined && parsed.frontmatter.topicOrder !== item.topicOrder) {
+          parsed.frontmatter.topicOrder = item.topicOrder;
+          changed = true;
+        }
+
+        if (changed) {
+          anyChanged = true;
+          const mdxContent = serializeMdx(parsed.frontmatter, parsed.body);
+          await github.createOrUpdateFile({
+            path: filePath,
+            content: mdxContent,
+            message: `Reorder: ${parsed.frontmatter.title}`,
+            branch: branchName,
+            sha,
+          });
+        }
+      }
+
+      if (!anyChanged) {
+        await github.deleteBranch(branchName);
+        return { success: true };
+      }
+
+      // Create PR and auto-merge so reorder takes effect immediately
+      const pr = await github.createPullRequest({
+        title: `Reorder content in ${input.roadmap}`,
+        body: "Automated reorder of content items",
+        head: branchName,
+        base: "main",
+      });
+
+      try {
+        await github.mergePullRequest(pr.number, "merge");
+        await github.deleteBranch(branchName);
+      } catch {
+        // If auto-merge fails (e.g. branch protection), leave PR open
+      }
+
+      return { success: true };
     }),
 });

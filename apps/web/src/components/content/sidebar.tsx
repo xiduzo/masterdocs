@@ -26,9 +26,27 @@ import {
   SidebarRail,
 } from "@fumadocs-learning/ui/components/sidebar";
 import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import type { DraggableAttributes } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, ClockAlert, File, Folder, FolderOpen, FolderPlus, Plus } from "lucide-react";
+import { ChevronRight, ClockAlert, File, Folder, FolderOpen, FolderPlus, GripVertical, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -53,6 +71,10 @@ type FileNode = {
   slug: string;
   roadmap: string;
   state: "published" | "pending_review";
+  track?: string;
+  trackTitle?: string;
+  trackOrder?: number;
+  topicOrder?: number;
 };
 
 type FolderNode = {
@@ -60,11 +82,24 @@ type FolderNode = {
   name: string;
   defaultOpen?: boolean;
   children: TreeNode[];
+  roadmap?: string;
+  track?: string;
+  trackTitle?: string;
 };
 
 type TreeNode = FileNode | FolderNode;
 
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
+
+function titleToSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 function hasPendingDescendant(node: TreeNode): boolean {
   if (node.type === "file") return node.state === "pending_review";
@@ -111,18 +146,25 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
       slug: file.slug,
       roadmap: group.roadmap,
       state: file.state,
+      track: file.track,
+      trackTitle: file.trackTitle,
+      trackOrder: file.trackOrder,
+      topicOrder: file.topicOrder,
     });
 
     const children: TreeNode[] = [
       ...[...untracked].sort(sortByTopic).map(toFileNode),
-      ...tracks.map(([, files]) => ({
+      ...tracks.map(([trackSlug, files]) => ({
         type: "folder" as const,
         name: files[0]?.trackTitle ?? files[0]?.track ?? "",
         children: [...files].sort(sortByTopic).map(toFileNode),
+        roadmap: group.roadmap,
+        track: trackSlug,
+        trackTitle: files[0]?.trackTitle ?? trackSlug,
       })),
     ];
 
-    return { type: "folder", name: group.roadmap, children };
+    return { type: "folder", name: group.roadmap, children, roadmap: group.roadmap };
   });
 }
 
@@ -130,25 +172,33 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
 
 function InlineCreateInput({
   roadmap,
+  track,
+  trackTitle,
+  trackOrder,
+  nextTopicOrder,
   onDone,
 }: {
   roadmap: string;
+  track?: string;
+  trackTitle?: string;
+  trackOrder?: number;
+  nextTopicOrder?: number;
   onDone: () => void;
 }) {
-  const [slug, setSlug] = useState("");
+  const [title, setTitle] = useState("");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const createMutation = useMutation(trpc.content.create.mutationOptions());
 
-  const slugValid = slug.length > 0 && SLUG_PATTERN.test(slug);
+  const slug = titleToSlug(title);
+  const canSubmit = slug.length > 0 && SLUG_PATTERN.test(slug) && !createMutation.isPending;
 
   const handleSubmit = () => {
-    if (!slugValid || createMutation.isPending) return;
-    const trimmed = slug.trim();
+    if (!canSubmit) return;
     createMutation.mutate(
-      { roadmap, slug: trimmed },
+      { roadmap, slug, track, trackTitle, trackOrder, topicOrder: nextTopicOrder },
       {
         onSuccess: () => {
           toast.success("File created");
@@ -156,7 +206,7 @@ function InlineCreateInput({
           onDone();
           navigate({
             to: "/admin/content/$roadmap/$slug",
-            params: { roadmap, slug: trimmed },
+            params: { roadmap, slug },
           });
         },
         onError: (err) => {
@@ -174,16 +224,16 @@ function InlineCreateInput({
         <input
           ref={inputRef}
           autoFocus
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSubmit();
             if (e.key === "Escape") onDone();
           }}
           onBlur={() => {
-            if (!slug && !createMutation.isPending) onDone();
+            if (!title && !createMutation.isPending) onDone();
           }}
-          placeholder="page-name"
+          placeholder="section name"
           disabled={createMutation.isPending}
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
         />
@@ -195,20 +245,19 @@ function InlineCreateInput({
 // ─── Inline create: new roadmap ───────────────────────────────────────────────
 
 function InlineCreateRoadmap({ onDone }: { onDone: () => void }) {
-  const [slug, setSlug] = useState("");
   const [title, setTitle] = useState("");
   const queryClient = useQueryClient();
-  const slugRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const createMutation = useMutation(trpc.content.createRoadmap.mutationOptions());
 
-  const slugValid = slug.length > 0 && SLUG_PATTERN.test(slug);
-  const canSubmit = slugValid && title.trim().length > 0 && !createMutation.isPending;
+  const slug = titleToSlug(title);
+  const canSubmit = slug.length > 0 && SLUG_PATTERN.test(slug) && title.trim().length > 0 && !createMutation.isPending;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     createMutation.mutate(
-      { slug: slug.trim(), title: title.trim() },
+      { slug, title: title.trim() },
       {
         onSuccess: () => {
           toast.success("Roadmap created");
@@ -217,7 +266,7 @@ function InlineCreateRoadmap({ onDone }: { onDone: () => void }) {
         },
         onError: (err) => {
           toast.error(err.message);
-          slugRef.current?.focus();
+          inputRef.current?.focus();
         },
       },
     );
@@ -225,38 +274,24 @@ function InlineCreateRoadmap({ onDone }: { onDone: () => void }) {
 
   return (
     <SidebarMenuItem>
-      <div className="flex flex-col gap-1 rounded-md px-2 py-1 text-sm">
-        <div className="flex items-center gap-2">
-          <Folder className="size-4 shrink-0 text-sidebar-foreground/40" />
-          <input
-            ref={slugRef}
-            autoFocus
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onDone();
-            }}
-            placeholder="roadmap-slug"
-            disabled={createMutation.isPending}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-          />
-        </div>
-        <div className="flex items-center gap-2 pl-6">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSubmit();
-              if (e.key === "Escape") onDone();
-            }}
-            onBlur={() => {
-              if (!slug && !title && !createMutation.isPending) onDone();
-            }}
-            placeholder="Title"
-            disabled={createMutation.isPending}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-          />
-        </div>
+      <div className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
+        <Folder className="size-4 shrink-0 text-sidebar-foreground/40" />
+        <input
+          ref={inputRef}
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
+            if (e.key === "Escape") onDone();
+          }}
+          onBlur={() => {
+            if (!title && !createMutation.isPending) onDone();
+          }}
+          placeholder="Roadmap title"
+          disabled={createMutation.isPending}
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+        />
       </div>
     </SidebarMenuItem>
   );
@@ -271,20 +306,19 @@ function InlineCreateTrack({
   roadmap: string;
   onDone: () => void;
 }) {
-  const [trackSlug, setTrackSlug] = useState("");
-  const [trackTitle, setTrackTitle] = useState("");
+  const [title, setTitle] = useState("");
   const queryClient = useQueryClient();
-  const slugRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const createMutation = useMutation(trpc.content.createTrack.mutationOptions());
 
-  const slugValid = trackSlug.length > 0 && SLUG_PATTERN.test(trackSlug);
-  const canSubmit = slugValid && trackTitle.trim().length > 0 && !createMutation.isPending;
+  const trackSlug = titleToSlug(title);
+  const canSubmit = trackSlug.length > 0 && SLUG_PATTERN.test(trackSlug) && title.trim().length > 0 && !createMutation.isPending;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     createMutation.mutate(
-      { roadmap, trackSlug: trackSlug.trim(), trackTitle: trackTitle.trim() },
+      { roadmap, trackSlug, trackTitle: title.trim() },
       {
         onSuccess: () => {
           toast.success("Sub-section created");
@@ -293,7 +327,7 @@ function InlineCreateTrack({
         },
         onError: (err) => {
           toast.error(err.message);
-          slugRef.current?.focus();
+          inputRef.current?.focus();
         },
       },
     );
@@ -301,38 +335,24 @@ function InlineCreateTrack({
 
   return (
     <SidebarMenuItem>
-      <div className="flex flex-col gap-1 rounded-md px-2 py-1 text-sm">
-        <div className="flex items-center gap-2">
-          <FolderPlus className="size-4 shrink-0 text-sidebar-foreground/40" />
-          <input
-            ref={slugRef}
-            autoFocus
-            value={trackSlug}
-            onChange={(e) => setTrackSlug(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onDone();
-            }}
-            placeholder="section-slug"
-            disabled={createMutation.isPending}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-          />
-        </div>
-        <div className="flex items-center gap-2 pl-6">
-          <input
-            value={trackTitle}
-            onChange={(e) => setTrackTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSubmit();
-              if (e.key === "Escape") onDone();
-            }}
-            onBlur={() => {
-              if (!trackSlug && !trackTitle && !createMutation.isPending) onDone();
-            }}
-            placeholder="Section Title"
-            disabled={createMutation.isPending}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-          />
-        </div>
+      <div className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
+        <FolderPlus className="size-4 shrink-0 text-sidebar-foreground/40" />
+        <input
+          ref={inputRef}
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
+            if (e.key === "Escape") onDone();
+          }}
+          onBlur={() => {
+            if (!title && !createMutation.isPending) onDone();
+          }}
+          placeholder="Track title"
+          disabled={createMutation.isPending}
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
+        />
       </div>
     </SidebarMenuItem>
   );
@@ -436,11 +456,268 @@ function FileItem({ item }: { item: FileNode }) {
   );
 }
 
-function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoadmapLevel?: boolean }) {
+/** Sortable wrapper for a file item inside a track folder */
+function SortableFileItem({ item }: { item: FileNode }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.slug });
+
+  const matchRoute = useMatchRoute();
+  const isActive = !!matchRoute({
+    to: "/admin/content/$roadmap/$slug",
+    params: { roadmap: item.roadmap, slug: item.slug },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  return (
+    <SidebarMenuItem ref={setNodeRef} style={style}>
+      <div className="group/sortable-file flex items-center">
+        <button
+          type="button"
+          className="flex shrink-0 cursor-grab touch-none items-center px-0.5 text-sidebar-foreground/30 opacity-0 transition-opacity group-hover/sortable-file:opacity-100"
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical className="size-3" />
+        </button>
+        <SidebarMenuButton
+          className="flex-1"
+          render={
+            <Link
+              to="/admin/content/$roadmap/$slug"
+              params={{ roadmap: item.roadmap, slug: item.slug }}
+            />
+          }
+          isActive={isActive}
+        >
+          <File />
+          <span>{item.name}</span>
+        </SidebarMenuButton>
+      </div>
+      {item.state === "pending_review" && (
+        <SidebarMenuBadge className="text-amber-500!">●</SidebarMenuBadge>
+      )}
+    </SidebarMenuItem>
+  );
+}
+
+/** Sortable wrapper for a track folder inside a roadmap */
+function SortableTrackFolder({ item, roadmapName }: { item: FolderNode; roadmapName: string }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.track ?? item.name });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TrackFolder
+        item={item}
+        roadmapName={roadmapName}
+        dragListeners={listeners}
+        dragAttributes={attributes}
+      />
+    </div>
+  );
+}
+
+/** A track folder with sortable files inside */
+function TrackFolder({
+  item,
+  roadmapName,
+  dragListeners,
+  dragAttributes,
+}: {
+  item: FolderNode;
+  roadmapName: string;
+  dragListeners?: ReturnType<typeof useSortable>["listeners"];
+  dragAttributes?: DraggableAttributes;
+}) {
+  const [open, setOpen] = useState(false);
+  const [isCreatingFile, setIsCreatingFile] = useState(false);
+  const hasPending = item.children.some(hasPendingDescendant);
+  const queryClient = useQueryClient();
+  const reorderMutation = useMutation(trpc.content.reorder.mutationOptions());
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const fileChildren = item.children.filter((c): c is FileNode => c.type === "file");
+  const fileIds = fileChildren.map((f) => f.slug);
+
+  const handleFileDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = fileChildren.findIndex((f) => f.slug === active.id);
+    const newIndex = fileChildren.findIndex((f) => f.slug === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(fileChildren, oldIndex, newIndex);
+    const items = reordered.map((f, i) => ({
+      slug: f.slug,
+      topicOrder: i + 1,
+    }));
+
+    reorderMutation.mutate(
+      { roadmap: roadmapName, items },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+        },
+        onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+      },
+    );
+  };
+
+  const handleAddFile = () => {
+    setOpen(true);
+    setIsCreatingFile(true);
+  };
+
+  // Get track info from the first file child
+  const firstFile = fileChildren[0];
+  const trackInfo = {
+    track: item.track ?? firstFile?.track,
+    trackTitle: item.trackTitle ?? firstFile?.trackTitle,
+    trackOrder: firstFile?.trackOrder,
+  };
+
+  return (
+    <SidebarMenuItem>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <div className="group/folder-row relative">
+          {dragListeners && (
+            <button
+              type="button"
+              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none px-0.5 text-sidebar-foreground/30 opacity-0 transition-opacity group-hover/folder-row:opacity-100"
+              {...(dragListeners as React.HTMLAttributes<HTMLButtonElement>)}
+              {...(dragAttributes as React.HTMLAttributes<HTMLButtonElement>)}
+            >
+              <GripVertical className="size-3" />
+            </button>
+          )}
+          <CollapsibleTrigger render={<SidebarMenuButton />}>
+            <ChevronRight
+              className="transition-transform duration-200"
+              style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+            />
+            {open ? <FolderOpen /> : <Folder />}
+            <span>{item.name}</span>
+          </CollapsibleTrigger>
+          {hasPending && (
+            <SidebarMenuBadge className="text-amber-500! group-hover/folder-row:opacity-0">
+              ●
+            </SidebarMenuBadge>
+          )}
+          <SidebarMenuAction
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAddFile();
+            }}
+            title="New file"
+            className="opacity-0 group-hover/folder-row:opacity-100"
+          >
+            <Plus />
+          </SidebarMenuAction>
+        </div>
+        <CollapsibleContent>
+          <SidebarMenuSub className="mr-0 pr-0">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleFileDragEnd}
+            >
+              <SortableContext items={fileIds} strategy={verticalListSortingStrategy}>
+                {fileChildren.map((child) => (
+                  <SortableFileItem key={child.slug} item={child} />
+                ))}
+              </SortableContext>
+            </DndContext>
+            {isCreatingFile && (
+              <InlineCreateInput
+                roadmap={roadmapName}
+                track={trackInfo.track}
+                trackTitle={trackInfo.trackTitle}
+                trackOrder={trackInfo.trackOrder}
+                nextTopicOrder={fileChildren.length + 1}
+                onDone={() => setIsCreatingFile(false)}
+              />
+            )}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </Collapsible>
+    </SidebarMenuItem>
+  );
+}
+
+function RoadmapFolder({ item }: { item: FolderNode }) {
   const [open, setOpen] = useState(item.defaultOpen ?? false);
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
   const hasPending = item.children.some(hasPendingDescendant);
+  const queryClient = useQueryClient();
+  const reorderMutation = useMutation(trpc.content.reorder.mutationOptions());
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const roadmapName = item.roadmap ?? item.name;
+  const fileChildren = item.children.filter((c): c is FileNode => c.type === "file");
+  const trackChildren = item.children.filter((c): c is FolderNode => c.type === "folder");
+  const trackIds = trackChildren.map((t) => t.track ?? t.name);
+
+  const handleTrackDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = trackChildren.findIndex((t) => (t.track ?? t.name) === active.id);
+    const newIndex = trackChildren.findIndex((t) => (t.track ?? t.name) === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(trackChildren, oldIndex, newIndex);
+    // Update trackOrder for first file of each track
+    const items = reordered.flatMap((track, i) => {
+      const files = track.children.filter((c): c is FileNode => c.type === "file");
+      return files.map((f) => ({
+        slug: f.slug,
+        trackOrder: i + 1,
+      }));
+    });
+
+    reorderMutation.mutate(
+      { roadmap: roadmapName, items },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+        },
+        onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+      },
+    );
+  };
 
   const handleAddFile = () => {
     setOpen(true);
@@ -455,7 +732,6 @@ function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoad
   return (
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={setOpen}>
-        {/* Wrapper scoped to just this row so hover doesn't bleed into children */}
         <div className="group/folder-row relative">
           <CollapsibleTrigger render={<SidebarMenuButton />}>
             <ChevronRight
@@ -470,58 +746,62 @@ function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoad
               ●
             </SidebarMenuBadge>
           )}
-          {isRoadmapLevel ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <SidebarMenuAction
-                    title="Add to roadmap"
-                    className="opacity-0 group-hover/folder-row:opacity-100"
-                  />
-                }
-              >
-                <Plus />
-              </DropdownMenuTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuContent side="right" align="start">
-                  <DropdownMenuItem onClick={handleAddFile}>
-                    <File className="size-4" />
-                    New file
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleAddTrack}>
-                    <FolderPlus className="size-4" />
-                    New sub-section
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenuPortal>
-            </DropdownMenu>
-          ) : (
-            <SidebarMenuAction
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAddFile();
-              }}
-              title="New file"
-              className="opacity-0 group-hover/folder-row:opacity-100"
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <SidebarMenuAction
+                  title="Add to roadmap"
+                  className="opacity-0 group-hover/folder-row:opacity-100"
+                />
+              }
             >
               <Plus />
-            </SidebarMenuAction>
-          )}
+            </DropdownMenuTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem onClick={handleAddFile}>
+                  <File className="size-4" />
+                  Section
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleAddTrack}>
+                  <FolderPlus className="size-4" />
+                  Track
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenuPortal>
+          </DropdownMenu>
         </div>
         <CollapsibleContent>
           <SidebarMenuSub className="mr-0 pr-0">
-            {item.children.map((child, i) => (
-              <Tree key={i} item={child} />
+            {/* Untracked files (not draggable at roadmap level) */}
+            {fileChildren.map((child) => (
+              <Tree key={child.slug} item={child} />
             ))}
+            {/* Track folders — drag to reorder */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleTrackDragEnd}
+            >
+              <SortableContext items={trackIds} strategy={verticalListSortingStrategy}>
+                {trackChildren.map((child) => (
+                  <SortableTrackFolder
+                    key={child.track ?? child.name}
+                    item={child}
+                    roadmapName={roadmapName}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
             {isCreatingFile && (
               <InlineCreateInput
-                roadmap={item.name}
+                roadmap={roadmapName}
                 onDone={() => setIsCreatingFile(false)}
               />
             )}
             {isCreatingTrack && (
               <InlineCreateTrack
-                roadmap={item.name}
+                roadmap={roadmapName}
                 onDone={() => setIsCreatingTrack(false)}
               />
             )}
@@ -530,6 +810,14 @@ function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoad
       </Collapsible>
     </SidebarMenuItem>
   );
+}
+
+function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoadmapLevel?: boolean }) {
+  if (isRoadmapLevel) {
+    return <RoadmapFolder item={item} />;
+  }
+  // Non-roadmap, non-track folders fallback (shouldn't happen with current tree structure)
+  return <TrackFolder item={item} roadmapName={item.roadmap ?? item.name} />;
 }
 
 function SidebarSkeleton() {
