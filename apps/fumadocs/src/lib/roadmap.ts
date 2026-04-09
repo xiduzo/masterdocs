@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { source, roadmapEntries } from "./source";
 
@@ -32,8 +32,16 @@ export interface TopicStructure {
 function getRoadmapSlug(
   entry: (typeof roadmapEntries)[number],
 ): string {
-  // info.path is the virtualized path, e.g. "frontend-development"
   return entry.info.path.replace(/\.mdx?$/, "").replace(/^\//, "");
+}
+
+/** Read and parse a meta.json file, returning null if it doesn't exist. */
+function readMeta(metaPath: string): { title?: string; pages?: string[] } | null {
+  try {
+    return JSON.parse(readFileSync(metaPath, "utf-8"));
+  } catch {
+    return null;
+  }
 }
 
 // --- Utility Functions ---
@@ -53,72 +61,71 @@ export function getAllRoadmaps(): Array<{
   }));
 }
 
+/** Set of known roadmap slugs for quick lookup. */
+const roadmapSlugs = new Set(roadmapEntries.map(getRoadmapSlug));
+
 /**
- * Builds the full structure for a given roadmap by filtering source pages
- * that have matching `roadmap` frontmatter, grouping them by track, and
- * sorting by trackOrder / topicOrder.
+ * Check if a slug corresponds to a known roadmap.
+ */
+export function isRoadmap(slug: string): boolean {
+  return roadmapSlugs.has(slug);
+}
+
+/**
+ * Builds the full structure for a given roadmap by reading the folder
+ * structure and meta.json files for ordering.
  *
  * Returns `undefined` if the roadmap slug doesn't match any known roadmap.
  */
 export function getRoadmapStructure(
   roadmapSlug: string,
 ): RoadmapStructure | undefined {
-  // Verify the roadmap exists in the metadata collection
   const roadmapMeta = roadmapEntries.find(
     (entry) => getRoadmapSlug(entry) === roadmapSlug,
   );
   if (!roadmapMeta) return undefined;
 
-  // Filter pages that belong to this roadmap
-  const pages = source.getPages().filter((page) => {
-    return page.data.roadmap === roadmapSlug;
-  });
+  const contentDir = join(process.cwd(), "content/docs");
 
-  // Group pages by track
-  const trackMap = new Map<
-    string,
-    {
-      slug: string;
-      title: string;
-      order: number;
-      topics: TopicStructure[];
-    }
-  >();
+  // Read roadmap meta.json for track ordering
+  const roadmapMetaJson = readMeta(join(contentDir, roadmapSlug, "meta.json"));
+  const trackSlugs = (roadmapMetaJson?.pages ?? []).filter((p: string) => p !== "index");
 
-  for (const page of pages) {
-    const { track: trackSlug, trackTitle, trackOrder, topicOrder } = page.data;
+  const allPages = source.getPages();
+  const tracks: TrackStructure[] = [];
 
-    // Skip pages with incomplete roadmap frontmatter
-    if (!trackSlug || !trackTitle || trackOrder == null || topicOrder == null) {
-      continue;
-    }
+  for (let trackIdx = 0; trackIdx < trackSlugs.length; trackIdx++) {
+    const trackSlug = trackSlugs[trackIdx];
+    const trackMetaPath = join(contentDir, roadmapSlug, trackSlug, "meta.json");
+    const trackMeta = readMeta(trackMetaPath);
+    if (!trackMeta) continue;
 
-    if (!trackMap.has(trackSlug)) {
-      trackMap.set(trackSlug, {
-        slug: trackSlug,
-        title: trackTitle,
-        order: trackOrder,
-        topics: [],
+    const topicSlugs = (trackMeta.pages ?? []).filter((p: string) => p !== "index");
+    const topics: TopicStructure[] = [];
+
+    for (let topicIdx = 0; topicIdx < topicSlugs.length; topicIdx++) {
+      const topicSlug = topicSlugs[topicIdx];
+      const page = allPages.find(
+        (p) => p.slugs[0] === roadmapSlug && p.slugs[1] === trackSlug && p.slugs[2] === topicSlug,
+      );
+      if (!page) continue;
+
+      topics.push({
+        slug: topicSlug,
+        title: page.data.title,
+        order: topicIdx,
+        skillIds: extractSkillIdsFromPage(page.path),
+        url: page.url,
       });
     }
 
-    const track = trackMap.get(trackSlug)!;
-    track.topics.push({
-      slug: page.slugs[page.slugs.length - 1],
-      title: page.data.title,
-      order: topicOrder,
-      skillIds: extractSkillIdsFromPage(page.path),
-      url: page.url,
+    tracks.push({
+      slug: trackSlug,
+      title: trackMeta.title ?? trackSlug,
+      order: trackIdx,
+      topics,
     });
   }
-
-  // Sort tracks by order, then topics within each track by order
-  const tracks = Array.from(trackMap.values())
-    .sort((a, b) => a.order - b.order)
-    .map((track) => ({
-      ...track,
-      topics: track.topics.sort((a, b) => a.order - b.order),
-    }));
 
   return {
     slug: roadmapSlug,
@@ -130,13 +137,11 @@ export function getRoadmapStructure(
 
 /**
  * Returns prev/next topic navigation links across the entire roadmap.
- * Topics are ordered by trackOrder then topicOrder, so navigation flows
- * from the last topic of one track into the first topic of the next.
+ * Topics are ordered by track order then topic order within each track.
  */
 export function getTopicNavigation(
   roadmapSlug: string,
-  _trackSlug: string,
-  topicOrder: number,
+  topicUrl: string,
 ): {
   prev: { title: string; url: string } | undefined;
   next: { title: string; url: string } | undefined;
@@ -145,21 +150,9 @@ export function getTopicNavigation(
   if (!structure) return undefined;
 
   // Flatten all topics across all tracks in order
-  const allTopics: TopicStructure[] = [];
-  for (const track of structure.tracks) {
-    for (const topic of track.topics) {
-      allTopics.push(topic);
-    }
-  }
+  const allTopics: TopicStructure[] = structure.tracks.flatMap((t) => t.topics);
 
-  // Find current topic by matching track and topicOrder
-  const track = structure.tracks.find((t) => t.slug === _trackSlug);
-  if (!track) return undefined;
-
-  const currentTopic = track.topics.find((t) => t.order === topicOrder);
-  if (!currentTopic) return undefined;
-
-  const index = allTopics.findIndex((t) => t.url === currentTopic.url);
+  const index = allTopics.findIndex((t) => t.url === topicUrl);
   if (index === -1) return undefined;
 
   return {
@@ -178,8 +171,6 @@ export function getTopicNavigation(
 /**
  * Extracts skill IDs from a page's raw MDX content by matching
  * `<Skill id="..." />` patterns.
- *
- * @param pagePath - The page's relative path (e.g. "frontend-development/variables-and-data-types.mdx")
  */
 export function extractSkillIdsFromPage(pagePath: string): string[] {
   try {

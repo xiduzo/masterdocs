@@ -1,11 +1,9 @@
 /**
  * Lightweight roadmap content resolver for the API package.
  *
- * Reads MDX content files directly from the filesystem to determine
- * roadmap structure and skill IDs. This avoids depending on the Fumadocs
- * content pipeline (which lives in apps/fumadocs).
- *
- * Requirements: 8.1, 8.2, 8.4
+ * Reads MDX content files and meta.json files directly from the filesystem
+ * to determine roadmap structure and skill IDs. Uses folder structure and
+ * meta.json for ordering (convention over configuration).
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -35,22 +33,10 @@ export interface TopicContent {
   skillIds: string[];
 }
 
-interface Frontmatter {
-  title?: string;
-  description?: string;
-  roadmap?: string;
-  track?: string;
-  trackTitle?: string;
-  trackOrder?: number;
-  topicOrder?: number;
-}
-
 // --- Helpers ---
 
 /** Resolve the content directory path relative to the monorepo root. */
 function resolveContentDir(): string {
-  // Walk up from packages/api (or wherever process.cwd() is) to find the monorepo root
-  // by looking for the apps/fumadocs/content directory
   const candidates = [
     join(process.cwd(), "apps/fumadocs/content"),
     join(process.cwd(), "../../apps/fumadocs/content"),
@@ -63,47 +49,34 @@ function resolveContentDir(): string {
     }
   }
 
-  // Fallback: assume cwd is monorepo root
   return join(process.cwd(), "apps/fumadocs/content");
 }
 
-/** Recursively collect all .mdx files under a directory. */
-function collectMdxFiles(dir: string): string[] {
-  const files: string[] = [];
-  if (!existsSync(dir)) return files;
-
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      files.push(...collectMdxFiles(full));
-    } else if (entry.endsWith(".mdx")) {
-      files.push(full);
-    }
-  }
-  return files;
-}
-
-/** Parse simple YAML frontmatter from MDX content. */
-function parseFrontmatter(content: string): Frontmatter | null {
+/** Parse simple YAML frontmatter from MDX content — extracts title and description only. */
+function parseFrontmatter(content: string): { title?: string; description?: string } | null {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match?.[1]) return null;
 
   const yaml = match[1];
-  const data: Record<string, string | number> = {};
+  const data: Record<string, string> = {};
 
   for (const line of yaml.split("\n")) {
     const kvMatch = line.match(/^(\w+):\s*(.+)$/);
     if (kvMatch?.[1] && kvMatch[2]) {
-      const key = kvMatch[1];
-      let value: string | number = kvMatch[2].trim();
-      if (/^\d+$/.test(value)) {
-        value = Number.parseInt(value, 10);
-      }
-      data[key] = value;
+      data[kvMatch[1]] = kvMatch[2].trim();
     }
   }
 
-  return data as unknown as Frontmatter;
+  return data as { title?: string; description?: string };
+}
+
+/** Read and parse a meta.json file, returning null on failure. */
+function readMeta(metaPath: string): { title?: string; pages?: string[] } | null {
+  try {
+    return JSON.parse(readFileSync(metaPath, "utf-8"));
+  } catch {
+    return null;
+  }
 }
 
 /** Extract skill IDs from MDX content by matching <Skill id="..." /> patterns. */
@@ -135,8 +108,8 @@ export function roadmapExists(roadmapSlug: string): boolean {
 }
 
 /**
- * Build the full content structure for a roadmap, including all tracks,
- * topics, and their skill IDs.
+ * Build the full content structure for a roadmap using folder structure
+ * and meta.json files for ordering.
  *
  * Returns undefined if the roadmap doesn't exist.
  */
@@ -154,71 +127,60 @@ export function getRoadmapContent(
   const roadmapContent = readFileSync(roadmapFile, "utf-8");
   const roadmapMeta = parseFrontmatter(roadmapContent);
 
-  // Collect all docs MDX files and filter by roadmap
-  const mdxFiles = collectMdxFiles(docsDir);
+  const roadmapDir = join(docsDir, roadmapSlug);
+  if (!existsSync(roadmapDir)) return undefined;
 
-  const trackMap = new Map<
-    string,
-    {
-      slug: string;
-      title: string;
-      order: number;
-      topics: TopicContent[];
-      skillIds: string[];
-    }
-  >();
+  // Read roadmap meta.json for track ordering
+  const roadmapMetaJson = readMeta(join(roadmapDir, "meta.json"));
+  const trackSlugs = (roadmapMetaJson?.pages ?? []).filter((p: string) => p !== "index");
 
-  for (const filePath of mdxFiles) {
-    let content: string;
-    try {
-      content = readFileSync(filePath, "utf-8");
-    } catch {
-      continue;
-    }
+  const tracks: TrackContent[] = [];
 
-    const fm = parseFrontmatter(content);
-    if (!fm || fm.roadmap !== roadmapSlug) continue;
+  for (let trackIdx = 0; trackIdx < trackSlugs.length; trackIdx++) {
+    const trackSlug = trackSlugs[trackIdx];
+    const trackDir = join(roadmapDir, trackSlug);
+    if (!existsSync(trackDir) || !statSync(trackDir).isDirectory()) continue;
 
-    // Skip pages with incomplete roadmap frontmatter
-    if (!fm.track || !fm.trackTitle || fm.trackOrder == null || fm.topicOrder == null) {
-      continue;
-    }
+    // Read track meta.json for title and topic ordering
+    const trackMeta = readMeta(join(trackDir, "meta.json"));
+    if (!trackMeta) continue;
 
-    const skillIds = extractSkillIds(content);
+    const topicSlugs = (trackMeta.pages ?? []).filter((p: string) => p !== "index");
+    const topics: TopicContent[] = [];
+    const allSkillIds: string[] = [];
 
-    if (!trackMap.has(fm.track)) {
-      trackMap.set(fm.track, {
-        slug: fm.track,
-        title: fm.trackTitle,
-        order: fm.trackOrder,
-        topics: [],
-        skillIds: [],
+    for (let topicIdx = 0; topicIdx < topicSlugs.length; topicIdx++) {
+      const topicSlug = topicSlugs[topicIdx];
+      const topicPath = join(trackDir, `${topicSlug}.mdx`);
+      if (!existsSync(topicPath)) continue;
+
+      let content: string;
+      try {
+        content = readFileSync(topicPath, "utf-8");
+      } catch {
+        continue;
+      }
+
+      const fm = parseFrontmatter(content);
+      const skillIds = extractSkillIds(content);
+      allSkillIds.push(...skillIds);
+
+      topics.push({
+        slug: topicSlug,
+        title: fm?.title ?? topicSlug,
+        order: topicIdx,
+        skillIds,
       });
     }
 
-    const track = trackMap.get(fm.track)!;
-
-    // Derive topic slug from filename
-    const fileName = filePath.split("/").pop() ?? "";
-    const topicSlug = fileName.replace(/\.mdx?$/, "");
-
-    track.topics.push({
-      slug: topicSlug,
-      title: fm.title ?? topicSlug,
-      order: fm.topicOrder,
-      skillIds,
+    tracks.push({
+      slug: trackSlug,
+      title: trackMeta.title ?? trackSlug,
+      order: trackIdx,
+      topics,
+      skillIds: allSkillIds,
     });
-
-    track.skillIds.push(...skillIds);
   }
-
-  // Sort tracks by order, topics within each track by order
-  const tracks = Array.from(trackMap.values())
-    .sort((a, b) => a.order - b.order)
-    .map((track) => ({
-      ...track,
-      topics: track.topics.sort((a, b) => a.order - b.order),
-    }));
 
   return {
     slug: roadmapSlug,

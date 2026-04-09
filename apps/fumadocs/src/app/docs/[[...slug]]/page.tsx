@@ -12,7 +12,7 @@ import { notFound } from "next/navigation";
 
 import { getMDXComponents } from "@/components/mdx";
 import { ProgressBar } from "@/components/progress-bar";
-import { getTopicNavigation, extractSkillIdsFromPage } from "@/lib/roadmap";
+import { getTopicNavigation, extractSkillIdsFromPage, isRoadmap } from "@/lib/roadmap";
 import { gitConfig } from "@/lib/shared";
 import { getPageImage, getPageMarkdownUrl, source } from "@/lib/source";
 
@@ -24,14 +24,15 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const MDX = page.data.body;
   const markdownUrl = getPageMarkdownUrl(page).url;
 
-  // Determine if this topic belongs to a roadmap
-  const { roadmap, track, topicOrder } = page.data;
-  const isRoadmapTopic = !!(roadmap && track && topicOrder != null);
+  // Determine if this topic belongs to a roadmap (3+ slug segments: roadmap/track/topic)
+  const slugs = page.slugs;
+  const roadmapSlug = slugs[0];
+  const isRoadmapTopic = slugs.length >= 3 && isRoadmap(roadmapSlug);
 
   // Extract skill IDs and navigation for roadmap topics
   const skillIds = isRoadmapTopic ? extractSkillIdsFromPage(page.path) : [];
   const navigation = isRoadmapTopic
-    ? getTopicNavigation(roadmap, track, topicOrder)
+    ? getTopicNavigation(roadmapSlug, page.url)
     : undefined;
 
   // For roadmap topics, override the built-in footer nav with track-aware prev/next

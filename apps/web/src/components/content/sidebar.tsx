@@ -63,8 +63,6 @@ type ContentFile = {
   state: "published" | "pending_review";
   track?: string;
   trackTitle?: string;
-  trackOrder?: number;
-  topicOrder?: number;
 };
 
 type FileNode = {
@@ -75,8 +73,6 @@ type FileNode = {
   state: "published" | "pending_review";
   track?: string;
   trackTitle?: string;
-  trackOrder?: number;
-  topicOrder?: number;
 };
 
 type FolderNode = {
@@ -86,7 +82,6 @@ type FolderNode = {
   children: TreeNode[];
   roadmap?: string;
   track?: string;
-  trackTitle?: string;
 };
 
 type TreeNode = FileNode | FolderNode;
@@ -125,22 +120,8 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
       }
     }
 
-    const sortByTopic = (a: ContentFile, b: ContentFile) => {
-      if (a.topicOrder !== undefined && b.topicOrder !== undefined)
-        return a.topicOrder - b.topicOrder;
-      if (a.topicOrder !== undefined) return -1;
-      if (b.topicOrder !== undefined) return 1;
-      return a.title.localeCompare(b.title);
-    };
-
-    const tracks = [...trackMap.entries()].sort(([, a], [, b]) => {
-      const ao = a[0]?.trackOrder;
-      const bo = b[0]?.trackOrder;
-      if (ao !== undefined && bo !== undefined) return ao - bo;
-      if (ao !== undefined) return -1;
-      if (bo !== undefined) return 1;
-      return (a[0]?.track ?? "").localeCompare(b[0]?.track ?? "");
-    });
+    // Preserve API ordering (derived from meta.json)
+    const tracks = [...trackMap.entries()];
 
     const toFileNode = (file: ContentFile): FileNode => ({
       type: "file",
@@ -150,19 +131,16 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
       state: file.state,
       track: file.track,
       trackTitle: file.trackTitle,
-      trackOrder: file.trackOrder,
-      topicOrder: file.topicOrder,
     });
 
     const children: TreeNode[] = [
-      ...[...untracked].sort(sortByTopic).map(toFileNode),
+      ...untracked.map(toFileNode),
       ...tracks.map(([trackSlug, files]) => ({
         type: "folder" as const,
-        name: files[0]?.trackTitle ?? files[0]?.track ?? "",
-        children: [...files].sort(sortByTopic).map(toFileNode),
+        name: files[0]?.trackTitle ?? trackSlug,
+        children: files.map(toFileNode),
         roadmap: group.roadmap,
         track: trackSlug,
-        trackTitle: files[0]?.trackTitle ?? trackSlug,
       })),
     ];
 
@@ -175,16 +153,10 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
 function InlineCreateInput({
   roadmap,
   track,
-  trackTitle,
-  trackOrder,
-  nextTopicOrder,
   onDone,
 }: {
   roadmap: string;
   track?: string;
-  trackTitle?: string;
-  trackOrder?: number;
-  nextTopicOrder?: number;
   onDone: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -200,7 +172,7 @@ function InlineCreateInput({
   const handleSubmit = () => {
     if (!canSubmit || !track) return;
     createMutation.mutate(
-      { roadmap, slug, track, trackTitle, trackOrder, topicOrder: nextTopicOrder },
+      { roadmap, slug, track },
       {
         onSuccess: () => {
           toast.success("File created");
@@ -610,13 +582,8 @@ function TrackFolder({
     setIsCreatingFile(true);
   };
 
-  // Get track info from the first file child
-  const firstFile = fileChildren[0];
-  const trackInfo = {
-    track: item.track ?? firstFile?.track,
-    trackTitle: item.trackTitle ?? firstFile?.trackTitle,
-    trackOrder: firstFile?.trackOrder,
-  };
+  // Get track slug from folder node or first file child
+  const trackSlug = item.track ?? fileChildren[0]?.track;
 
   return (
     <SidebarMenuItem>
@@ -674,10 +641,7 @@ function TrackFolder({
             {isCreatingFile && (
               <InlineCreateInput
                 roadmap={roadmapName}
-                track={trackInfo.track}
-                trackTitle={trackInfo.trackTitle}
-                trackOrder={trackInfo.trackOrder}
-                nextTopicOrder={fileChildren.length + 1}
+                track={trackSlug}
                 onDone={() => setIsCreatingFile(false)}
               />
             )}

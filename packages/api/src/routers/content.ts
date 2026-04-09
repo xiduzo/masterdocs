@@ -81,26 +81,28 @@ export const contentRouter = router({
     async function parseFile(filePath: string, trackSlug?: string) {
       const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
       let title = slug;
-      let track: string | undefined = trackSlug;
-      let trackTitle: string | undefined;
-      let trackOrder: number | undefined;
-      let topicOrder: number | undefined;
       try {
         const branch = pendingMap.get(filePath);
         const { content } = await github.getFileContent(filePath, branch);
         const parsed = parseMdx(content);
         title = parsed.frontmatter.title || slug;
-        track = parsed.frontmatter.track ?? trackSlug;
-        trackTitle = parsed.frontmatter.trackTitle;
-        trackOrder = parsed.frontmatter.trackOrder;
-        topicOrder = parsed.frontmatter.topicOrder;
       } catch {
         // fall back to slug as title
       }
       const state = pendingMap.has(filePath)
         ? ("pending_review" as const)
         : ("published" as const);
-      return { slug, title, path: filePath, state, track, trackTitle, trackOrder, topicOrder };
+      return { slug, title, path: filePath, state, track: trackSlug };
+    }
+
+    /** Read a meta.json and return its parsed content, or null. */
+    async function readMeta(metaPath: string): Promise<{ title?: string; pages?: string[] } | null> {
+      try {
+        const { content } = await github.getFileContent(metaPath);
+        return JSON.parse(content);
+      } catch {
+        return null;
+      }
     }
 
     // 3. For each roadmap dir, scan for files and track subdirectories
@@ -115,6 +117,13 @@ export const contentRouter = router({
 
         const seenPaths = new Set<string>();
 
+        // Read the roadmap's meta.json for track ordering
+        const roadmapMeta = await readMeta(`${dir.path}/meta.json`);
+        const trackOrderMap = new Map<string, number>();
+        if (roadmapMeta?.pages) {
+          roadmapMeta.pages.forEach((name, i) => trackOrderMap.set(name, i));
+        }
+
         // Parse roadmap-level MDX files (index, etc.)
         const topLevelFiles = await Promise.all(
           roadmapMdxFiles.map(async (file) => {
@@ -123,7 +132,7 @@ export const contentRouter = router({
           }),
         );
 
-        // Parse track-level MDX files
+        // Parse track-level MDX files, deriving order from track meta.json
         const trackFiles = await Promise.all(
           trackDirs.map(async (trackDir) => {
             const trackSlug = trackDir.path.split("/").pop()!;
@@ -131,12 +140,27 @@ export const contentRouter = router({
             const trackMdxFiles = trackEntries.filter(
               (e) => e.type === "file" && e.path.endsWith(".mdx"),
             );
-            return Promise.all(
+
+            // Read the track's meta.json for title and topic ordering
+            const trackMeta = await readMeta(`${trackDir.path}/meta.json`);
+            const topicOrderMap = new Map<string, number>();
+            if (trackMeta?.pages) {
+              trackMeta.pages.forEach((name, i) => topicOrderMap.set(name, i));
+            }
+
+            const files = await Promise.all(
               trackMdxFiles.map(async (file) => {
                 seenPaths.add(file.path);
-                return parseFile(file.path, trackSlug);
+                const parsed = await parseFile(file.path, trackSlug);
+                return {
+                  ...parsed,
+                  trackTitle: trackMeta?.title ?? trackSlug,
+                  trackOrder: trackOrderMap.get(trackSlug),
+                  topicOrder: topicOrderMap.get(parsed.slug),
+                };
               }),
             );
+            return files;
           }),
         );
 
@@ -297,11 +321,6 @@ export const contentRouter = router({
         frontmatter: z.object({
           title: z.string().min(1),
           description: z.string().optional(),
-          roadmap: z.string().optional(),
-          track: z.string().optional(),
-          trackTitle: z.string().optional(),
-          trackOrder: z.number().optional(),
-          topicOrder: z.number().optional(),
         }),
         body: z.string(),
         fileSha: z.string().optional(),
@@ -376,9 +395,6 @@ export const contentRouter = router({
         roadmap: z.string(),
         slug: z.string(),
         track: z.string(),
-        trackTitle: z.string().optional(),
-        trackOrder: z.number().optional(),
-        topicOrder: z.number().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -413,11 +429,6 @@ export const contentRouter = router({
         title: input.slug
           .replace(/-/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase()),
-        roadmap: input.roadmap,
-        track: input.track,
-        trackTitle: input.trackTitle,
-        trackOrder: input.trackOrder,
-        topicOrder: input.topicOrder,
       };
 
       // 5. Serialize MDX with empty body
@@ -633,11 +644,6 @@ export const contentRouter = router({
             frontmatter: z.object({
               title: z.string().min(1),
               description: z.string().optional(),
-              roadmap: z.string().optional(),
-              track: z.string().optional(),
-              trackTitle: z.string().optional(),
-              trackOrder: z.number().optional(),
-              topicOrder: z.number().optional(),
             }),
             body: z.string(),
           })
@@ -841,7 +847,6 @@ export const contentRouter = router({
         roadmap: z.string(),
         trackSlug: z.string(),
         trackTitle: z.string().min(1),
-        trackOrder: z.number().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -939,7 +944,7 @@ export const contentRouter = router({
       return { prNumber: pr.number, branchName };
     }),
 
-  /** Reorder tracks and/or topics within a roadmap. Commits directly via a temp branch + auto-merge. */
+  /** Reorder tracks and/or topics within a roadmap. Updates meta.json files via a temp branch + auto-merge. */
   reorder: adminProcedure
     .input(
       z.object({
@@ -956,38 +961,84 @@ export const contentRouter = router({
     )
     .mutation(async ({ input }) => {
       const github = createGitHubService();
+      const contentBase = "apps/fumadocs/content/docs";
 
       const branchName = `content/reorder-${input.roadmap}-${Date.now()}`;
       const mainSha = await github.getMainHeadSha();
       await github.createBranch(branchName, mainSha);
 
-      let anyChanged = false;
+      // Group items by track to determine which meta.json files to update
+      const trackTopics = new Map<string, { slug: string; topicOrder?: number }[]>();
+      const trackOrders = new Map<string, number>();
 
       for (const item of input.items) {
-        const filePath = contentFilePath(input.roadmap, item.slug, item.track);
-        const { content, sha } = await github.getFileContent(filePath);
-        const parsed = parseMdx(content);
-
-        let changed = false;
-        if (item.trackOrder !== undefined && parsed.frontmatter.trackOrder !== item.trackOrder) {
-          parsed.frontmatter.trackOrder = item.trackOrder;
-          changed = true;
+        if (item.track) {
+          if (item.topicOrder !== undefined) {
+            const bucket = trackTopics.get(item.track) ?? [];
+            bucket.push({ slug: item.slug, topicOrder: item.topicOrder });
+            trackTopics.set(item.track, bucket);
+          }
+          if (item.trackOrder !== undefined) {
+            trackOrders.set(item.track, item.trackOrder);
+          }
         }
-        if (item.topicOrder !== undefined && parsed.frontmatter.topicOrder !== item.topicOrder) {
-          parsed.frontmatter.topicOrder = item.topicOrder;
-          changed = true;
-        }
+      }
 
-        if (changed) {
-          anyChanged = true;
-          const mdxContent = serializeMdx(parsed.frontmatter, parsed.body);
-          await github.createOrUpdateFile({
-            path: filePath,
-            content: mdxContent,
-            message: `Reorder: ${parsed.frontmatter.title}`,
-            branch: branchName,
-            sha,
-          });
+      let anyChanged = false;
+
+      // Update track meta.json files (topic ordering within tracks)
+      for (const [track, topics] of trackTopics) {
+        const metaPath = `${contentBase}/${input.roadmap}/${track}/meta.json`;
+        try {
+          const { content: metaRaw, sha } = await github.getFileContent(metaPath, branchName);
+          const meta = JSON.parse(metaRaw);
+          if (!Array.isArray(meta.pages)) continue;
+
+          // Sort topics by new topicOrder, keep "index" first
+          const sorted = [...topics].sort((a, b) => (a.topicOrder ?? 0) - (b.topicOrder ?? 0));
+          const newPages = ["index", ...sorted.map((t) => t.slug).filter((s) => s !== "index")];
+
+          // Only update if order actually changed
+          if (JSON.stringify(meta.pages) !== JSON.stringify(newPages)) {
+            meta.pages = newPages;
+            anyChanged = true;
+            await github.createOrUpdateFile({
+              path: metaPath,
+              content: JSON.stringify(meta, null, 2) + "\n",
+              message: `Reorder topics in ${track}`,
+              branch: branchName,
+              sha,
+            });
+          }
+        } catch {
+          // Skip if meta.json doesn't exist
+        }
+      }
+
+      // Update roadmap meta.json (track ordering)
+      if (trackOrders.size > 0) {
+        const metaPath = `${contentBase}/${input.roadmap}/meta.json`;
+        try {
+          const { content: metaRaw, sha } = await github.getFileContent(metaPath, branchName);
+          const meta = JSON.parse(metaRaw);
+          if (Array.isArray(meta.pages)) {
+            const sorted = [...trackOrders.entries()].sort(([, a], [, b]) => a - b);
+            const newPages = ["index", ...sorted.map(([track]) => track)];
+
+            if (JSON.stringify(meta.pages) !== JSON.stringify(newPages)) {
+              meta.pages = newPages;
+              anyChanged = true;
+              await github.createOrUpdateFile({
+                path: metaPath,
+                content: JSON.stringify(meta, null, 2) + "\n",
+                message: `Reorder tracks in ${input.roadmap}`,
+                branch: branchName,
+                sha,
+              });
+            }
+          }
+        } catch {
+          // Skip if meta.json doesn't exist
         }
       }
 

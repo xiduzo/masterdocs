@@ -3,11 +3,6 @@ import { stringify, parse } from "yaml";
 export interface MdxFrontmatter {
   title: string;
   description?: string;
-  roadmap?: string;
-  track?: string;
-  trackTitle?: string;
-  trackOrder?: number;
-  topicOrder?: number;
 }
 
 /**
@@ -38,15 +33,6 @@ export function parseMdx(raw: string): {
 
   if (parsed.description !== undefined)
     frontmatter.description = String(parsed.description);
-  if (parsed.roadmap !== undefined)
-    frontmatter.roadmap = String(parsed.roadmap);
-  if (parsed.track !== undefined) frontmatter.track = String(parsed.track);
-  if (parsed.trackTitle !== undefined)
-    frontmatter.trackTitle = String(parsed.trackTitle);
-  if (parsed.trackOrder !== undefined)
-    frontmatter.trackOrder = Number(parsed.trackOrder);
-  if (parsed.topicOrder !== undefined)
-    frontmatter.topicOrder = Number(parsed.topicOrder);
 
   // Body is everything after the closing `---` delimiter line.
   // Strip exactly one leading newline (the blank line after closing ---).
@@ -71,14 +57,6 @@ export function serializeMdx(
   const obj: Record<string, unknown> = { title: frontmatter.title };
   if (frontmatter.description !== undefined)
     obj.description = frontmatter.description;
-  if (frontmatter.roadmap !== undefined) obj.roadmap = frontmatter.roadmap;
-  if (frontmatter.track !== undefined) obj.track = frontmatter.track;
-  if (frontmatter.trackTitle !== undefined)
-    obj.trackTitle = frontmatter.trackTitle;
-  if (frontmatter.trackOrder !== undefined)
-    obj.trackOrder = frontmatter.trackOrder;
-  if (frontmatter.topicOrder !== undefined)
-    obj.topicOrder = frontmatter.topicOrder;
 
   const yamlStr = stringify(obj, { lineWidth: 0 }).trimEnd();
   return `---\n${yamlStr}\n---\n${body}`;
