@@ -50,16 +50,33 @@
   min-height: 12rem;
 }
 
+.dark-theme .mdxeditor-diff-source-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow-y: scroll;
+  margin-bottom: 64px;
+}
+
+.dark-theme .mdxeditor-rich-text-editor {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
 .dark-theme [class*="_rootContentEditableWrapper"] {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding-bottom: 32px;
 }
 
 .dark-theme [class*="_contentEditable"] {
   flex: 1;
-  min-height: 8rem;
+  min-height: calc(100vh - 120px);
   overflow-y: auto;
 }
 

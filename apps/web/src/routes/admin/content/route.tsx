@@ -53,7 +53,7 @@ function ContentLayout() {
       <Sidebar>
         <ContentSidebar />
       </Sidebar>
-      <SidebarInset className="overflow-hidden">
+      <SidebarInset className="min-h-0 overflow-hidden">
         <Outlet />
       </SidebarInset>
     </SidebarProvider>
