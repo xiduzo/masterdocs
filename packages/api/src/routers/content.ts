@@ -119,10 +119,18 @@ export const contentRouter = router({
 
         // Read the roadmap's meta.json for track ordering
         const roadmapMeta = await readMeta(`${dir.path}/meta.json`);
-        const trackOrderMap = new Map<string, number>();
-        if (roadmapMeta?.pages) {
-          roadmapMeta.pages.forEach((name, i) => trackOrderMap.set(name, i));
-        }
+        const roadmapPages = roadmapMeta?.pages ?? [];
+
+        // Sort track dirs by meta.json page order
+        const trackDirMap = new Map(trackDirs.map((d) => [d.path.split("/").pop()!, d]));
+        const sortedTrackDirs = [
+          // First: tracks listed in meta.json order
+          ...roadmapPages
+            .filter((name: string) => trackDirMap.has(name))
+            .map((name: string) => trackDirMap.get(name)!),
+          // Then: any track dirs not in meta.json (shouldn't happen, but defensive)
+          ...trackDirs.filter((d) => !roadmapPages.includes(d.path.split("/").pop()!)),
+        ];
 
         // Parse roadmap-level MDX files (index, etc.)
         const topLevelFiles = await Promise.all(
@@ -132,9 +140,9 @@ export const contentRouter = router({
           }),
         );
 
-        // Parse track-level MDX files, deriving order from track meta.json
+        // Parse track-level MDX files, sorted by track meta.json order
         const trackFiles = await Promise.all(
-          trackDirs.map(async (trackDir) => {
+          sortedTrackDirs.map(async (trackDir) => {
             const trackSlug = trackDir.path.split("/").pop()!;
             const trackEntries = await github.getDirectoryTree(trackDir.path);
             const trackMdxFiles = trackEntries.filter(
@@ -143,20 +151,26 @@ export const contentRouter = router({
 
             // Read the track's meta.json for title and topic ordering
             const trackMeta = await readMeta(`${trackDir.path}/meta.json`);
-            const topicOrderMap = new Map<string, number>();
-            if (trackMeta?.pages) {
-              trackMeta.pages.forEach((name, i) => topicOrderMap.set(name, i));
-            }
+            const trackPages = trackMeta?.pages ?? [];
+
+            // Build file map for ordering
+            const fileMap = new Map(trackMdxFiles.map((f) => [f.path.split("/").pop()!.replace(/\.mdx$/, ""), f]));
+
+            // Sort files by meta.json page order
+            const sortedMdxFiles = [
+              ...trackPages
+                .filter((name: string) => fileMap.has(name))
+                .map((name: string) => fileMap.get(name)!),
+              ...trackMdxFiles.filter((f) => !trackPages.includes(f.path.split("/").pop()!.replace(/\.mdx$/, ""))),
+            ];
 
             const files = await Promise.all(
-              trackMdxFiles.map(async (file) => {
+              sortedMdxFiles.map(async (file) => {
                 seenPaths.add(file.path);
                 const parsed = await parseFile(file.path, trackSlug);
                 return {
                   ...parsed,
                   trackTitle: trackMeta?.title ?? trackSlug,
-                  trackOrder: trackOrderMap.get(trackSlug),
-                  topicOrder: topicOrderMap.get(parsed.slug),
                 };
               }),
             );
@@ -944,7 +958,7 @@ export const contentRouter = router({
       return { prNumber: pr.number, branchName };
     }),
 
-  /** Reorder tracks and/or topics within a roadmap. Updates meta.json files via a temp branch + auto-merge. */
+  /** Reorder tracks and/or topics within a roadmap. Updates meta.json files directly on main. */
   reorder: adminProcedure
     .input(
       z.object({
@@ -960,12 +974,18 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
+      const invalidIndexItem = input.items.find(
+        (item) => item.slug === "index" || item.track === "index",
+      );
+      if (invalidIndexItem) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: 'The "index" item cannot be reordered and must stay first.',
+        });
+      }
+
       const github = createGitHubService();
       const contentBase = "apps/fumadocs/content/docs";
-
-      const branchName = `content/reorder-${input.roadmap}-${Date.now()}`;
-      const mainSha = await github.getMainHeadSha();
-      await github.createBranch(branchName, mainSha);
 
       // Group items by track to determine which meta.json files to update
       const trackTopics = new Map<string, { slug: string; topicOrder?: number }[]>();
@@ -990,13 +1010,17 @@ export const contentRouter = router({
       for (const [track, topics] of trackTopics) {
         const metaPath = `${contentBase}/${input.roadmap}/${track}/meta.json`;
         try {
-          const { content: metaRaw, sha } = await github.getFileContent(metaPath, branchName);
+          const { content: metaRaw, sha } = await github.getFileContent(metaPath, "main");
           const meta = JSON.parse(metaRaw);
           if (!Array.isArray(meta.pages)) continue;
 
           // Sort topics by new topicOrder, keep "index" first
           const sorted = [...topics].sort((a, b) => (a.topicOrder ?? 0) - (b.topicOrder ?? 0));
-          const newPages = ["index", ...sorted.map((t) => t.slug).filter((s) => s !== "index")];
+          const orderedTopics = sorted.map((t) => t.slug).filter((s) => s !== "index");
+          const remainingTopics = meta.pages.filter(
+            (page: string) => page !== "index" && !orderedTopics.includes(page),
+          );
+          const newPages = ["index", ...orderedTopics, ...remainingTopics];
 
           // Only update if order actually changed
           if (JSON.stringify(meta.pages) !== JSON.stringify(newPages)) {
@@ -1006,7 +1030,7 @@ export const contentRouter = router({
               path: metaPath,
               content: JSON.stringify(meta, null, 2) + "\n",
               message: `Reorder topics in ${track}`,
-              branch: branchName,
+              branch: "main",
               sha,
             });
           }
@@ -1019,11 +1043,15 @@ export const contentRouter = router({
       if (trackOrders.size > 0) {
         const metaPath = `${contentBase}/${input.roadmap}/meta.json`;
         try {
-          const { content: metaRaw, sha } = await github.getFileContent(metaPath, branchName);
+          const { content: metaRaw, sha } = await github.getFileContent(metaPath, "main");
           const meta = JSON.parse(metaRaw);
           if (Array.isArray(meta.pages)) {
             const sorted = [...trackOrders.entries()].sort(([, a], [, b]) => a - b);
-            const newPages = ["index", ...sorted.map(([track]) => track)];
+            const orderedTracks = sorted.map(([track]) => track).filter((track) => track !== "index");
+            const remainingTracks = meta.pages.filter(
+              (page: string) => page !== "index" && !orderedTracks.includes(page),
+            );
+            const newPages = ["index", ...orderedTracks, ...remainingTracks];
 
             if (JSON.stringify(meta.pages) !== JSON.stringify(newPages)) {
               meta.pages = newPages;
@@ -1032,7 +1060,7 @@ export const contentRouter = router({
                 path: metaPath,
                 content: JSON.stringify(meta, null, 2) + "\n",
                 message: `Reorder tracks in ${input.roadmap}`,
-                branch: branchName,
+                branch: "main",
                 sha,
               });
             }
@@ -1043,23 +1071,7 @@ export const contentRouter = router({
       }
 
       if (!anyChanged) {
-        await github.deleteBranch(branchName);
         return { success: true };
-      }
-
-      // Create PR and auto-merge so reorder takes effect immediately
-      const pr = await github.createPullRequest({
-        title: `Reorder content in ${input.roadmap}`,
-        body: "Automated reorder of content items",
-        head: branchName,
-        base: "main",
-      });
-
-      try {
-        await github.mergePullRequest(pr.number, "merge");
-        await github.deleteBranch(branchName);
-      } catch {
-        // If auto-merge fails (e.g. branch protection), leave PR open
       }
 
       return { success: true };

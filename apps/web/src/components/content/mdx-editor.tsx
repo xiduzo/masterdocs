@@ -276,7 +276,7 @@ export const ContentEditor = forwardRef<MDXEditorMethods, ContentEditorProps>(
       <MDXEditor
         ref={ref}
         markdown={markdown}
-        className={`dark-theme ${className ?? ""}`}
+        className={`dark-theme h-full ${className ?? ""}`}
         contentEditableClassName="prose prose-invert max-w-none"
         plugins={[
           headingsPlugin(),

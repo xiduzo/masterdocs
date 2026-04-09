@@ -164,12 +164,14 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
         )}
 
         {/* Editor */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-hidden">
           <Suspense fallback={<div className="p-6"><Skeleton className="h-64 w-full" /></div>}>
             <MdxContentEditor
+              key={fileKey}
               ref={editorRef}
               markdown={body}
               diffMarkdown={data.mainBody}
+              className="h-full"
               onChange={setBody}
             />
           </Suspense>

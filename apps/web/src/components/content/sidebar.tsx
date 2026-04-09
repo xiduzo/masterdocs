@@ -46,7 +46,7 @@ import {
 import type { DraggableAttributes } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { Link, useMatchRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { ChevronRight, File, Folder, FolderOpen, FolderPlus, GripVertical, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -432,6 +432,7 @@ function FileItem({ item }: { item: FileNode }) {
 
 /** Sortable wrapper for a file item inside a track folder */
 function SortableFileItem({ item }: { item: FileNode }) {
+  const isIndex = item.slug === "index";
   const {
     attributes,
     listeners,
@@ -439,7 +440,7 @@ function SortableFileItem({ item }: { item: FileNode }) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.slug });
+  } = useSortable({ id: item.slug, disabled: isIndex });
 
   const matchRoute = useMatchRoute();
   const hasTrack = !!item.track;
@@ -472,14 +473,16 @@ function SortableFileItem({ item }: { item: FileNode }) {
   return (
     <SidebarMenuItem ref={setNodeRef} style={style}>
       <div className="group/sortable-file flex items-center">
-        <button
-          type="button"
-          className="flex shrink-0 cursor-grab touch-none items-center px-0.5 text-sidebar-foreground/30 opacity-0 transition-opacity group-hover/sortable-file:opacity-100"
-          {...listeners}
-          {...attributes}
-        >
-          <GripVertical className="size-3" />
-        </button>
+        {!isIndex && (
+          <button
+            type="button"
+            className="flex shrink-0 cursor-grab touch-none items-center px-0.5 text-sidebar-foreground/30 opacity-0 transition-opacity group-hover/sortable-file:opacity-100"
+            {...listeners}
+            {...attributes}
+          >
+            <GripVertical className="size-3" />
+          </button>
+        )}
         <SidebarMenuButton
           className="flex-1"
           render={<Link {...linkProps} />}
@@ -537,7 +540,9 @@ function TrackFolder({
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   dragAttributes?: DraggableAttributes;
 }) {
-  const [open, setOpen] = useState(false);
+  const { roadmap: activeRoadmap, track: activeTrack } = useParams({ strict: false }) as { roadmap?: string; track?: string };
+  const isChildActive = item.roadmap === activeRoadmap && item.track === activeTrack;
+  const [open, setOpen] = useState(isChildActive);
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const hasPending = item.children.some(hasPendingDescendant);
   const queryClient = useQueryClient();
@@ -549,17 +554,19 @@ function TrackFolder({
   );
 
   const fileChildren = item.children.filter((c): c is FileNode => c.type === "file");
-  const fileIds = fileChildren.map((f) => f.slug);
+  const indexFile = fileChildren.find((f) => f.slug === "index");
+  const sortableFileChildren = fileChildren.filter((f) => f.slug !== "index");
+  const fileIds = sortableFileChildren.map((f) => f.slug);
 
   const handleFileDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = fileChildren.findIndex((f) => f.slug === active.id);
-    const newIndex = fileChildren.findIndex((f) => f.slug === over.id);
+    const oldIndex = sortableFileChildren.findIndex((f) => f.slug === active.id);
+    const newIndex = sortableFileChildren.findIndex((f) => f.slug === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(fileChildren, oldIndex, newIndex);
+    const reordered = arrayMove(sortableFileChildren, oldIndex, newIndex);
     const items = reordered.map((f, i) => ({
       slug: f.slug,
       track: f.track,
@@ -627,13 +634,14 @@ function TrackFolder({
         </div>
         <CollapsibleContent>
           <SidebarMenuSub className={cn(dragListeners && "ml-8", "mr-0 pr-0")}>
+            {indexFile && <FileItem item={indexFile} />}
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleFileDragEnd}
             >
               <SortableContext items={fileIds} strategy={verticalListSortingStrategy}>
-                {fileChildren.map((child) => (
+                {sortableFileChildren.map((child) => (
                   <SortableFileItem key={child.slug} item={child} />
                 ))}
               </SortableContext>
@@ -653,7 +661,9 @@ function TrackFolder({
 }
 
 function RoadmapFolder({ item }: { item: FolderNode }) {
-  const [open, setOpen] = useState(item.defaultOpen ?? false);
+  const { roadmap: activeRoadmap } = useParams({ strict: false }) as { roadmap?: string };
+  const isChildActive = item.roadmap === activeRoadmap;
+  const [open, setOpen] = useState(isChildActive);
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
   const hasPending = item.children.some(hasPendingDescendant);
   const queryClient = useQueryClient();
@@ -666,19 +676,21 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
 
   const roadmapName = item.roadmap ?? item.name;
   const fileChildren = item.children.filter((c): c is FileNode => c.type === "file");
+  const indexFile = fileChildren.find((f) => f.slug === "index");
+  const sortableFileChildren = fileChildren.filter((f) => f.slug !== "index");
   const trackChildren = item.children.filter((c): c is FolderNode => c.type === "folder");
-  const fileIds = fileChildren.map((f) => f.slug);
+  const fileIds = sortableFileChildren.map((f) => f.slug);
   const trackIds = trackChildren.map((t) => t.track ?? t.name);
 
   const handleFileDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = fileChildren.findIndex((f) => f.slug === active.id);
-    const newIndex = fileChildren.findIndex((f) => f.slug === over.id);
+    const oldIndex = sortableFileChildren.findIndex((f) => f.slug === active.id);
+    const newIndex = sortableFileChildren.findIndex((f) => f.slug === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(fileChildren, oldIndex, newIndex);
+    const reordered = arrayMove(sortableFileChildren, oldIndex, newIndex);
     const items = reordered.map((f, i) => ({
       slug: f.slug,
       track: f.track,
@@ -772,13 +784,14 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
         <CollapsibleContent>
           <SidebarMenuSub className="mr-0 pr-0">
             {/* Untracked files — drag to reorder */}
+            {indexFile && <FileItem item={indexFile} />}
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleFileDragEnd}
             >
               <SortableContext items={fileIds} strategy={verticalListSortingStrategy}>
-                {fileChildren.map((child) => (
+                {sortableFileChildren.map((child) => (
                   <SortableFileItem key={child.slug} item={child} />
                 ))}
               </SortableContext>
