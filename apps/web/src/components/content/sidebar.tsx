@@ -198,7 +198,7 @@ function InlineCreateInput({
   const canSubmit = slug.length > 0 && SLUG_PATTERN.test(slug) && !createMutation.isPending;
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !track) return;
     createMutation.mutate(
       { roadmap, slug, track, trackTitle, trackOrder, topicOrder: nextTopicOrder },
       {
@@ -207,8 +207,8 @@ function InlineCreateInput({
           queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
           onDone();
           navigate({
-            to: "/admin/content/$roadmap/$slug",
-            params: { roadmap, slug },
+            to: "/admin/content/$roadmap/$track/$slug",
+            params: { roadmap, track, slug },
           });
         },
         onError: (err) => {
@@ -421,20 +421,31 @@ function Tree({ item, isRoadmapLevel = false }: { item: TreeNode; isRoadmapLevel
 
 function FileItem({ item }: { item: FileNode }) {
   const matchRoute = useMatchRoute();
-  const isActive = !!matchRoute({
-    to: "/admin/content/$roadmap/$slug",
-    params: { roadmap: item.roadmap, slug: item.slug },
-  });
+  const hasTrack = !!item.track;
+  const isActive = hasTrack
+    ? !!matchRoute({
+        to: "/admin/content/$roadmap/$track/$slug",
+        params: { roadmap: item.roadmap, track: item.track!, slug: item.slug },
+      })
+    : !!matchRoute({
+        to: "/admin/content/$roadmap/$slug",
+        params: { roadmap: item.roadmap, slug: item.slug },
+      });
+
+  const linkProps = hasTrack
+    ? {
+        to: "/admin/content/$roadmap/$track/$slug" as const,
+        params: { roadmap: item.roadmap, track: item.track!, slug: item.slug },
+      }
+    : {
+        to: "/admin/content/$roadmap/$slug" as const,
+        params: { roadmap: item.roadmap, slug: item.slug },
+      };
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        render={
-          <Link
-            to="/admin/content/$roadmap/$slug"
-            params={{ roadmap: item.roadmap, slug: item.slug }}
-          />
-        }
+        render={<Link {...linkProps} />}
         isActive={isActive}
       >
         <File />
@@ -459,10 +470,26 @@ function SortableFileItem({ item }: { item: FileNode }) {
   } = useSortable({ id: item.slug });
 
   const matchRoute = useMatchRoute();
-  const isActive = !!matchRoute({
-    to: "/admin/content/$roadmap/$slug",
-    params: { roadmap: item.roadmap, slug: item.slug },
-  });
+  const hasTrack = !!item.track;
+  const isActive = hasTrack
+    ? !!matchRoute({
+        to: "/admin/content/$roadmap/$track/$slug",
+        params: { roadmap: item.roadmap, track: item.track!, slug: item.slug },
+      })
+    : !!matchRoute({
+        to: "/admin/content/$roadmap/$slug",
+        params: { roadmap: item.roadmap, slug: item.slug },
+      });
+
+  const linkProps = hasTrack
+    ? {
+        to: "/admin/content/$roadmap/$track/$slug" as const,
+        params: { roadmap: item.roadmap, track: item.track!, slug: item.slug },
+      }
+    : {
+        to: "/admin/content/$roadmap/$slug" as const,
+        params: { roadmap: item.roadmap, slug: item.slug },
+      };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -483,12 +510,7 @@ function SortableFileItem({ item }: { item: FileNode }) {
         </button>
         <SidebarMenuButton
           className="flex-1"
-          render={
-            <Link
-              to="/admin/content/$roadmap/$slug"
-              params={{ roadmap: item.roadmap, slug: item.slug }}
-            />
-          }
+          render={<Link {...linkProps} />}
           isActive={isActive}
         >
           <File />
@@ -568,6 +590,7 @@ function TrackFolder({
     const reordered = arrayMove(fileChildren, oldIndex, newIndex);
     const items = reordered.map((f, i) => ({
       slug: f.slug,
+      track: f.track,
       topicOrder: i + 1,
     }));
 
@@ -667,7 +690,6 @@ function TrackFolder({
 
 function RoadmapFolder({ item }: { item: FolderNode }) {
   const [open, setOpen] = useState(item.defaultOpen ?? false);
-  const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
   const hasPending = item.children.some(hasPendingDescendant);
   const queryClient = useQueryClient();
@@ -695,6 +717,7 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
     const reordered = arrayMove(fileChildren, oldIndex, newIndex);
     const items = reordered.map((f, i) => ({
       slug: f.slug,
+      track: f.track,
       topicOrder: i + 1,
     }));
 
@@ -723,6 +746,7 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
       const files = track.children.filter((c): c is FileNode => c.type === "file");
       return files.map((f) => ({
         slug: f.slug,
+        track: f.track,
         trackOrder: i + 1,
       }));
     });
@@ -736,11 +760,6 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
         onError: (err) => toast.error(`Reorder failed: ${err.message}`),
       },
     );
-  };
-
-  const handleAddFile = () => {
-    setOpen(true);
-    setIsCreatingFile(true);
   };
 
   const handleAddTrack = () => {
@@ -778,10 +797,6 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
             </DropdownMenuTrigger>
             <DropdownMenuPortal>
               <DropdownMenuContent side="right" align="start">
-                <DropdownMenuItem onClick={handleAddFile}>
-                  <File className="size-4" />
-                  Section
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleAddTrack}>
                   <FolderPlus className="size-4" />
                   Track
@@ -820,12 +835,6 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
                 ))}
               </SortableContext>
             </DndContext>
-            {isCreatingFile && (
-              <InlineCreateInput
-                roadmap={roadmapName}
-                onDone={() => setIsCreatingFile(false)}
-              />
-            )}
             {isCreatingTrack && (
               <InlineCreateTrack
                 roadmap={roadmapName}

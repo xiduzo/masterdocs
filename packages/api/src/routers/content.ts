@@ -24,12 +24,47 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
+/**
+ * Ensure a roadmap directory has an index.mdx on the given branch.
+ * Creates one if missing. Returns true if the file was created.
+ */
+async function ensureRoadmapIndex(
+  github: ReturnType<typeof createGitHubService>,
+  roadmapSlug: string,
+  title: string,
+  branch: string,
+) {
+  const indexPath = `apps/fumadocs/content/docs/${roadmapSlug}/index.mdx`;
+  try {
+    await github.getFileContent(indexPath, branch);
+    return false; // already exists
+  } catch (err) {
+    if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+  }
+  const indexMdx = serializeMdx({ title }, "");
+  await github.createOrUpdateFile({
+    path: indexPath,
+    content: indexMdx,
+    message: `Create index page for ${title}`,
+    branch,
+  });
+  return true;
+}
+
+/** Build the full file path for a content file. */
+function contentFilePath(roadmap: string, slug: string, track?: string) {
+  const base = "apps/fumadocs/content/docs";
+  return track
+    ? `${base}/${roadmap}/${track}/${slug}.mdx`
+    : `${base}/${roadmap}/${slug}.mdx`;
+}
+
 export const contentRouter = router({
   list: adminProcedure.query(async () => {
     const github = createGitHubService();
     const contentBase = "apps/fumadocs/content/docs";
 
-    // 1. Get top-level entries (roadmap directories + loose files)
+    // 1. Get top-level entries (roadmap directories)
     const topLevel = await github.getDirectoryTree(contentBase);
     const roadmapDirs = topLevel.filter((e) => e.type === "dir");
 
@@ -40,108 +75,103 @@ export const contentRouter = router({
       .where(eq(changeRecords.status, "pending_review"));
 
     const pendingMap = new Map(pendingRecords.map((r) => [r.filePath, r.branchName]));
-
-    // 3. Collect the set of roadmap dir names we already know about
     const roadmapDirNames = new Set(roadmapDirs.map((d) => d.path.split("/").pop()!));
 
-    // 4. For each roadmap dir, list MDX files and fetch their titles
+    // Helper: parse file metadata from GitHub
+    async function parseFile(filePath: string, trackSlug?: string) {
+      const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
+      let title = slug;
+      let track: string | undefined = trackSlug;
+      let trackTitle: string | undefined;
+      let trackOrder: number | undefined;
+      let topicOrder: number | undefined;
+      try {
+        const branch = pendingMap.get(filePath);
+        const { content } = await github.getFileContent(filePath, branch);
+        const parsed = parseMdx(content);
+        title = parsed.frontmatter.title || slug;
+        track = parsed.frontmatter.track ?? trackSlug;
+        trackTitle = parsed.frontmatter.trackTitle;
+        trackOrder = parsed.frontmatter.trackOrder;
+        topicOrder = parsed.frontmatter.topicOrder;
+      } catch {
+        // fall back to slug as title
+      }
+      const state = pendingMap.has(filePath)
+        ? ("pending_review" as const)
+        : ("published" as const);
+      return { slug, title, path: filePath, state, track, trackTitle, trackOrder, topicOrder };
+    }
+
+    // 3. For each roadmap dir, scan for files and track subdirectories
     const results = await Promise.all(
       roadmapDirs.map(async (dir) => {
         const dirName = dir.path.split("/").pop()!;
         const entries = await github.getDirectoryTree(dir.path);
-        const mdxFiles = entries.filter(
+        const roadmapMdxFiles = entries.filter(
           (e) => e.type === "file" && e.path.endsWith(".mdx"),
         );
+        const trackDirs = entries.filter((e) => e.type === "dir");
 
-        // Track which file paths we've already seen on main
-        const seenPaths = new Set(mdxFiles.map((f) => f.path));
+        const seenPaths = new Set<string>();
 
-        const files = await Promise.all(
-          mdxFiles.map(async (file) => {
-            const slug = file.path
-              .split("/")
-              .pop()!
-              .replace(/\.mdx$/, "");
-
-            let title = slug;
-            let track: string | undefined;
-            let trackTitle: string | undefined;
-            let trackOrder: number | undefined;
-            let topicOrder: number | undefined;
-            try {
-              const branch = pendingMap.get(file.path);
-              const { content } = await github.getFileContent(file.path, branch);
-              const parsed = parseMdx(content);
-              title = parsed.frontmatter.title || slug;
-              track = parsed.frontmatter.track;
-              trackTitle = parsed.frontmatter.trackTitle;
-              trackOrder = parsed.frontmatter.trackOrder;
-              topicOrder = parsed.frontmatter.topicOrder;
-            } catch {
-              // If we can't parse the file, fall back to slug as title
-            }
-
-            const state = pendingMap.has(file.path)
-              ? ("pending_review" as const)
-              : ("published" as const);
-
-            return { slug, title, path: file.path, state, track, trackTitle, trackOrder, topicOrder };
+        // Parse roadmap-level MDX files (index, etc.)
+        const topLevelFiles = await Promise.all(
+          roadmapMdxFiles.map(async (file) => {
+            seenPaths.add(file.path);
+            return parseFile(file.path);
           }),
         );
 
-        // 5. Add pending files that only exist on feature branches (not yet on main)
+        // Parse track-level MDX files
+        const trackFiles = await Promise.all(
+          trackDirs.map(async (trackDir) => {
+            const trackSlug = trackDir.path.split("/").pop()!;
+            const trackEntries = await github.getDirectoryTree(trackDir.path);
+            const trackMdxFiles = trackEntries.filter(
+              (e) => e.type === "file" && e.path.endsWith(".mdx"),
+            );
+            return Promise.all(
+              trackMdxFiles.map(async (file) => {
+                seenPaths.add(file.path);
+                return parseFile(file.path, trackSlug);
+              }),
+            );
+          }),
+        );
+
+        const allFiles = [...topLevelFiles, ...trackFiles.flat()];
+
+        // Add pending files that only exist on feature branches
         const pendingOnlyFiles = await Promise.all(
           [...pendingMap.entries()]
             .filter(([filePath]) => {
               if (seenPaths.has(filePath)) return false;
-              // Check this file belongs to this roadmap dir
               const prefix = `${contentBase}/${dirName}/`;
               return filePath.startsWith(prefix) && filePath.endsWith(".mdx");
             })
-            .map(async ([filePath, branchName]) => {
-              const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
-              let title = slug;
-              let track: string | undefined;
-              let trackTitle: string | undefined;
-              let trackOrder: number | undefined;
-              let topicOrder: number | undefined;
-              try {
-                const { content } = await github.getFileContent(filePath, branchName);
-                const parsed = parseMdx(content);
-                title = parsed.frontmatter.title || slug;
-                track = parsed.frontmatter.track;
-                trackTitle = parsed.frontmatter.trackTitle;
-                trackOrder = parsed.frontmatter.trackOrder;
-                topicOrder = parsed.frontmatter.topicOrder;
-              } catch {
-                // fall back to slug as title
-              }
-              return {
-                slug,
-                title,
-                path: filePath,
-                state: "pending_review" as const,
-                track,
-                trackTitle,
-                trackOrder,
-                topicOrder,
-              };
+            .map(async ([filePath]) => {
+              // Derive track from path: content/docs/{roadmap}/{track}/{file}.mdx
+              const relative = filePath.slice(`${contentBase}/${dirName}/`.length);
+              const parts = relative.split("/");
+              const derivedTrack = parts.length > 1 ? parts[0] : undefined;
+              return parseFile(filePath, derivedTrack);
             }),
         );
 
-        return { roadmap: dirName, files: [...files, ...pendingOnlyFiles] };
+        return { roadmap: dirName, files: [...allFiles, ...pendingOnlyFiles] };
       }),
     );
 
-    // 6. Add pending files for roadmap dirs that don't exist on main yet
+    // 4. Add pending files for roadmap dirs that don't exist on main yet
     const pendingNewRoadmaps = new Map<string, Array<{ filePath: string; branchName: string }>>();
     for (const [filePath, branchName] of pendingMap) {
       if (!filePath.startsWith(`${contentBase}/`) || !filePath.endsWith(".mdx")) continue;
-      const relative = filePath.slice(contentBase.length + 1); // e.g. "newroadmap/some-file.mdx"
+      const relative = filePath.slice(contentBase.length + 1);
       const parts = relative.split("/");
       if (parts.length < 2) continue;
       const dirName = parts[0];
-      if (roadmapDirNames.has(dirName)) continue; // already handled above
+      if (roadmapDirNames.has(dirName)) continue;
       if (!pendingNewRoadmaps.has(dirName)) pendingNewRoadmaps.set(dirName, []);
       pendingNewRoadmaps.get(dirName)!.push({ filePath, branchName });
     }
@@ -149,34 +179,11 @@ export const contentRouter = router({
     const newRoadmapResults = await Promise.all(
       [...pendingNewRoadmaps.entries()].map(async ([dirName, entries]) => {
         const files = await Promise.all(
-          entries.map(async ({ filePath, branchName }) => {
-            const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
-            let title = slug;
-            let track: string | undefined;
-            let trackTitle: string | undefined;
-            let trackOrder: number | undefined;
-            let topicOrder: number | undefined;
-            try {
-              const { content } = await github.getFileContent(filePath, branchName);
-              const parsed = parseMdx(content);
-              title = parsed.frontmatter.title || slug;
-              track = parsed.frontmatter.track;
-              trackTitle = parsed.frontmatter.trackTitle;
-              trackOrder = parsed.frontmatter.trackOrder;
-              topicOrder = parsed.frontmatter.topicOrder;
-            } catch {
-              // fall back to slug
-            }
-            return {
-              slug,
-              title,
-              path: filePath,
-              state: "pending_review" as const,
-              track,
-              trackTitle,
-              trackOrder,
-              topicOrder,
-            };
+          entries.map(async ({ filePath }) => {
+            const relative = filePath.slice(`${contentBase}/${dirName}/`.length);
+            const parts = relative.split("/");
+            const derivedTrack = parts.length > 1 ? parts[0] : undefined;
+            return parseFile(filePath, derivedTrack);
           }),
         );
         return { roadmap: dirName, files };
@@ -208,13 +215,14 @@ export const contentRouter = router({
     .input(
       z.object({
         roadmap: z.string(),
+        track: z.string().optional(),
         slug: z.string(),
         fromBranch: z.boolean().optional(),
       }),
     )
     .query(async ({ input }) => {
       const github = createGitHubService();
-      const filePath = `apps/fumadocs/content/docs/${input.roadmap}/${input.slug}.mdx`;
+      const filePath = contentFilePath(input.roadmap, input.slug, input.track);
 
       // Look up a pending change_record for this file path
       const [pendingRecord] = await db
@@ -284,6 +292,7 @@ export const contentRouter = router({
     .input(
       z.object({
         roadmap: z.string(),
+        track: z.string().optional(),
         slug: z.string(),
         frontmatter: z.object({
           title: z.string().min(1),
@@ -303,7 +312,7 @@ export const contentRouter = router({
 
       // 1. Serialize MDX from frontmatter + body
       const mdxContent = serializeMdx(input.frontmatter, input.body);
-      const filePath = `apps/fumadocs/content/docs/${input.roadmap}/${input.slug}.mdx`;
+      const filePath = contentFilePath(input.roadmap, input.slug, input.track);
 
       // 2. Check for an existing pending change record
       const [existingRecord] = await db
@@ -366,7 +375,7 @@ export const contentRouter = router({
       z.object({
         roadmap: z.string(),
         slug: z.string(),
-        track: z.string().optional(),
+        track: z.string(),
         trackTitle: z.string().optional(),
         trackOrder: z.number().optional(),
         topicOrder: z.number().optional(),
@@ -384,42 +393,31 @@ export const contentRouter = router({
 
       const github = createGitHubService();
 
-      // 2. Build file path
-      const filePath = `apps/fumadocs/content/docs/${input.roadmap}/${input.slug}.mdx`;
+      // 2. Build file path (nested under track directory)
+      const filePath = contentFilePath(input.roadmap, input.slug, input.track);
 
       // 3. Check if file already exists on main
       try {
         await github.getFileContent(filePath);
-        // If we get here, the file exists → conflict
         throw new TRPCError({
           code: "CONFLICT",
           message: "File already exists",
         });
       } catch (err) {
-        // If it's our own CONFLICT error, re-throw
-        if (err instanceof TRPCError && err.code === "CONFLICT") {
-          throw err;
-        }
-        // A "not found" error is expected — the file doesn't exist yet
-        if (!(err instanceof Error) || !err.message.includes("not found")) {
-          throw err;
-        }
+        if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
+        if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
       }
 
-      // 4. Create default frontmatter (title derived from slug, with track context if provided)
+      // 4. Create default frontmatter
       const defaultFrontmatter: MdxFrontmatter = {
         title: input.slug
           .replace(/-/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase()),
-        ...(input.track
-          ? {
-              roadmap: input.roadmap,
-              track: input.track,
-              trackTitle: input.trackTitle,
-              trackOrder: input.trackOrder,
-              topicOrder: input.topicOrder,
-            }
-          : {}),
+        roadmap: input.roadmap,
+        track: input.track,
+        trackTitle: input.trackTitle,
+        trackOrder: input.trackOrder,
+        topicOrder: input.topicOrder,
       };
 
       // 5. Serialize MDX with empty body
@@ -429,6 +427,10 @@ export const contentRouter = router({
       const branchName = `content/${input.slug}-${Date.now()}`;
       const mainSha = await github.getMainHeadSha();
       await github.createBranch(branchName, mainSha);
+
+      // Ensure the roadmap has an index page
+      await ensureRoadmapIndex(github, input.roadmap, input.roadmap, branchName);
+
       await github.createOrUpdateFile({
         path: filePath,
         content: mdxContent,
@@ -436,8 +438,8 @@ export const contentRouter = router({
         branch: branchName,
       });
 
-      // Update the roadmap's meta.json to include the new page in the sidebar
-      const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/meta.json`;
+      // Update the track's meta.json to include the new page
+      const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/${input.track}/meta.json`;
       try {
         const { content: metaRaw, sha: metaSha } = await github.getFileContent(
           metaPath,
@@ -449,7 +451,7 @@ export const contentRouter = router({
           await github.createOrUpdateFile({
             path: metaPath,
             content: JSON.stringify(meta, null, 2) + "\n",
-            message: `Add ${input.slug} to meta.json`,
+            message: `Add ${input.slug} to ${input.track}/meta.json`,
             branch: branchName,
             sha: metaSha,
           });
@@ -465,7 +467,6 @@ export const contentRouter = router({
         base: "main",
       });
 
-      // 7. Insert change_record
       await db.insert(changeRecords).values({
         userId: ctx.session.user.id,
         filePath,
@@ -474,7 +475,6 @@ export const contentRouter = router({
         baseCommitSha: mainSha,
       });
 
-      // 8. Return PR number and branch name
       return { prNumber: pr.number, branchName };
     }),
 
@@ -845,10 +845,9 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      // The track slug is used as the first topic file name
-      const fileSlug = input.trackSlug;
+      const trackSlug = input.trackSlug;
 
-      if (!isValidSlug(fileSlug)) {
+      if (!isValidSlug(trackSlug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Slug must contain only lowercase letters, numbers, and hyphens",
@@ -856,55 +855,65 @@ export const contentRouter = router({
       }
 
       const github = createGitHubService();
-      const filePath = `apps/fumadocs/content/docs/${input.roadmap}/${fileSlug}.mdx`;
+      const contentBase = "apps/fumadocs/content/docs";
+      const trackDir = `${contentBase}/${input.roadmap}/${trackSlug}`;
 
-      // Check the file doesn't already exist
+      // Check the track directory doesn't already exist
       try {
-        await github.getFileContent(filePath);
-        throw new TRPCError({ code: "CONFLICT", message: "File already exists" });
+        await github.getDirectoryTree(trackDir);
+        throw new TRPCError({ code: "CONFLICT", message: "Track already exists" });
       } catch (err) {
         if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
         if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
       }
 
-      const frontmatter = {
-        title: input.trackTitle
-          .split(" ")
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" "),
-        roadmap: input.roadmap,
-        track: input.trackSlug,
-        trackTitle: input.trackTitle,
-        trackOrder: input.trackOrder,
-        topicOrder: 1,
-      };
-
-      const mdxContent = serializeMdx(frontmatter, "");
-
-      const branchName = `content/${fileSlug}-${Date.now()}`;
+      const branchName = `content/${trackSlug}-${Date.now()}`;
       const mainSha = await github.getMainHeadSha();
       await github.createBranch(branchName, mainSha);
+
+      // Ensure the roadmap has an index page
+      await ensureRoadmapIndex(github, input.roadmap, input.roadmap, branchName);
+
+      // 1. Create track index.mdx
+      const trackTitle = input.trackTitle
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      const indexMdx = serializeMdx({ title: trackTitle, description: "" }, "");
       await github.createOrUpdateFile({
-        path: filePath,
-        content: mdxContent,
-        message: `Create new track: ${input.trackTitle}`,
+        path: `${trackDir}/index.mdx`,
+        content: indexMdx,
+        message: `Create track index: ${trackTitle}`,
         branch: branchName,
       });
 
-      // Update the roadmap's meta.json to include the new page in the sidebar
-      const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/meta.json`;
+      // 2. Create track meta.json
+      const trackMeta = JSON.stringify(
+        { title: trackTitle, pages: ["index"] },
+        null,
+        2,
+      ) + "\n";
+      await github.createOrUpdateFile({
+        path: `${trackDir}/meta.json`,
+        content: trackMeta,
+        message: `Create track meta.json: ${trackTitle}`,
+        branch: branchName,
+      });
+
+      // 3. Update the roadmap's meta.json to include the new track folder
+      const roadmapMetaPath = `${contentBase}/${input.roadmap}/meta.json`;
       try {
         const { content: metaRaw, sha: metaSha } = await github.getFileContent(
-          metaPath,
+          roadmapMetaPath,
           branchName,
         );
         const meta = JSON.parse(metaRaw);
-        if (Array.isArray(meta.pages) && !meta.pages.includes(fileSlug)) {
-          meta.pages.push(fileSlug);
+        if (Array.isArray(meta.pages) && !meta.pages.includes(trackSlug)) {
+          meta.pages.push(trackSlug);
           await github.createOrUpdateFile({
-            path: metaPath,
+            path: roadmapMetaPath,
             content: JSON.stringify(meta, null, 2) + "\n",
-            message: `Add ${fileSlug} to meta.json`,
+            message: `Add ${trackSlug} to roadmap meta.json`,
             branch: branchName,
             sha: metaSha,
           });
@@ -914,8 +923,8 @@ export const contentRouter = router({
       }
 
       const pr = await github.createPullRequest({
-        title: `New track: ${input.trackTitle}`,
-        body: `Created new track in ${input.roadmap}: ${input.trackTitle}`,
+        title: `New track: ${trackTitle}`,
+        body: `Created new track in ${input.roadmap}: ${trackTitle}`,
         head: branchName,
         base: "main",
       });
@@ -938,6 +947,7 @@ export const contentRouter = router({
         items: z.array(
           z.object({
             slug: z.string(),
+            track: z.string().optional(),
             trackOrder: z.number().optional(),
             topicOrder: z.number().optional(),
           }),
@@ -946,7 +956,6 @@ export const contentRouter = router({
     )
     .mutation(async ({ input }) => {
       const github = createGitHubService();
-      const contentBase = "apps/fumadocs/content/docs";
 
       const branchName = `content/reorder-${input.roadmap}-${Date.now()}`;
       const mainSha = await github.getMainHeadSha();
@@ -955,7 +964,7 @@ export const contentRouter = router({
       let anyChanged = false;
 
       for (const item of input.items) {
-        const filePath = `${contentBase}/${input.roadmap}/${item.slug}.mdx`;
+        const filePath = contentFilePath(input.roadmap, item.slug, item.track);
         const { content, sha } = await github.getFileContent(filePath);
         const parsed = parseMdx(content);
 

@@ -1,0 +1,9 @@
+{
+  "title": "Hardware Components",
+  "pages": [
+    "index",
+    "sensors-and-input",
+    "displays-and-leds",
+    "motors-and-actuators"
+  ]
+}

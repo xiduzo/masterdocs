@@ -16,6 +16,7 @@ import { Route as PublicDashboardRouteImport } from './routes/_public/dashboard'
 import { Route as AdminContentRouteRouteImport } from './routes/admin/content/route'
 import { Route as AdminContentIndexRouteImport } from './routes/admin/content/index'
 import { Route as AdminContentRoadmapSlugRouteImport } from './routes/admin/content/$roadmap.$slug'
+import { Route as AdminContentRoadmapTrackSlugRouteImport } from './routes/admin/content/$roadmap.$track.$slug'
 
 const PublicRoute = PublicRouteImport.update({
   id: '/_public',
@@ -51,6 +52,12 @@ const AdminContentRoadmapSlugRoute = AdminContentRoadmapSlugRouteImport.update({
   path: '/$roadmap/$slug',
   getParentRoute: () => AdminContentRouteRoute,
 } as any)
+const AdminContentRoadmapTrackSlugRoute =
+  AdminContentRoadmapTrackSlugRouteImport.update({
+    id: '/$roadmap/$track/$slug',
+    path: '/$roadmap/$track/$slug',
+    getParentRoute: () => AdminContentRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof PublicLoginRoute
   '/admin/content/': typeof AdminContentIndexRoute
   '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
+  '/admin/content/$roadmap/$track/$slug': typeof AdminContentRoadmapTrackSlugRoute
 }
 export interface FileRoutesByTo {
   '/dashboard': typeof PublicDashboardRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/admin/content': typeof AdminContentIndexRoute
   '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
+  '/admin/content/$roadmap/$track/$slug': typeof AdminContentRoadmapTrackSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -76,6 +85,7 @@ export interface FileRoutesById {
   '/_public/': typeof PublicIndexRoute
   '/admin/content/': typeof AdminContentIndexRoute
   '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
+  '/admin/content/$roadmap/$track/$slug': typeof AdminContentRoadmapTrackSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/admin/content/'
     | '/admin/content/$roadmap/$slug'
+    | '/admin/content/$roadmap/$track/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/dashboard'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/content'
     | '/admin/content/$roadmap/$slug'
+    | '/admin/content/$roadmap/$track/$slug'
   id:
     | '__root__'
     | '/_public'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
     | '/_public/'
     | '/admin/content/'
     | '/admin/content/$roadmap/$slug'
+    | '/admin/content/$roadmap/$track/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -160,6 +173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminContentRoadmapSlugRouteImport
       parentRoute: typeof AdminContentRouteRoute
     }
+    '/admin/content/$roadmap/$track/$slug': {
+      id: '/admin/content/$roadmap/$track/$slug'
+      path: '/$roadmap/$track/$slug'
+      fullPath: '/admin/content/$roadmap/$track/$slug'
+      preLoaderRoute: typeof AdminContentRoadmapTrackSlugRouteImport
+      parentRoute: typeof AdminContentRouteRoute
+    }
   }
 }
 
@@ -181,11 +201,13 @@ const PublicRouteWithChildren =
 interface AdminContentRouteRouteChildren {
   AdminContentIndexRoute: typeof AdminContentIndexRoute
   AdminContentRoadmapSlugRoute: typeof AdminContentRoadmapSlugRoute
+  AdminContentRoadmapTrackSlugRoute: typeof AdminContentRoadmapTrackSlugRoute
 }
 
 const AdminContentRouteRouteChildren: AdminContentRouteRouteChildren = {
   AdminContentIndexRoute: AdminContentIndexRoute,
   AdminContentRoadmapSlugRoute: AdminContentRoadmapSlugRoute,
+  AdminContentRoadmapTrackSlugRoute: AdminContentRoadmapTrackSlugRoute,
 }
 
 const AdminContentRouteRouteWithChildren =

@@ -1,17 +1,10 @@
 {
   "title": "Figma",
   "pages": [
-    "---Figma Fundamentals---",
-    "getting-started",
-    "layout-and-auto-layout",
-    "---Components and Design Systems---",
-    "components-and-variants",
-    "variables-and-tokens",
-    "design-systems",
-    "---Development and AI---",
-    "dev-mode-and-handoff",
-    "mcp-and-ai-integration",
-    "---Alternatives---",
-    "alternative-tools"
+    "index",
+    "figma-fundamentals",
+    "components-and-design-systems",
+    "development-and-ai",
+    "alternatives"
   ]
 }
