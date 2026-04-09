@@ -1,5 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@fumadocs-learning/ui/components/card";
-import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@masterdocs/ui/components/card";
+import { Skeleton } from "@masterdocs/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 

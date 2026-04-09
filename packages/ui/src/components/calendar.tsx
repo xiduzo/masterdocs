@@ -6,8 +6,8 @@ import {
   type Locale,
 } from "react-day-picker"
 
-import { cn } from "@fumadocs-learning/ui/lib/utils"
-import { Button, buttonVariants } from "@fumadocs-learning/ui/components/button"
+import { cn } from "@masterdocs/ui/lib/utils"
+import { Button, buttonVariants } from "@masterdocs/ui/components/button"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
 
 function Calendar({

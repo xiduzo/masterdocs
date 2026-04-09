@@ -1,4 +1,4 @@
-import { Separator } from "@fumadocs-learning/ui/components/separator";
+import { Separator } from "@masterdocs/ui/components/separator";
 import { Link } from "@tanstack/react-router";
 
 import { ModeToggle } from "./mode-toggle";

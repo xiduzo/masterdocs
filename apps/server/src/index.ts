@@ -1,7 +1,7 @@
-import { createContext } from "@fumadocs-learning/api/context";
-import { appRouter } from "@fumadocs-learning/api/routers/index";
-import { auth } from "@fumadocs-learning/auth";
-import { env } from "@fumadocs-learning/env/server";
+import { createContext } from "@masterdocs/api/context";
+import { appRouter } from "@masterdocs/api/routers/index";
+import { auth } from "@masterdocs/auth";
+import { env } from "@masterdocs/env/server";
 import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";

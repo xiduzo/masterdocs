@@ -3,11 +3,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@fumadocs-learning/ui/components/button";
-import { Field, FieldDescription, FieldError } from "@fumadocs-learning/ui/components/field";
-import { Input } from "@fumadocs-learning/ui/components/input";
-import { Label } from "@fumadocs-learning/ui/components/label";
-import { Separator } from "@fumadocs-learning/ui/components/separator";
+import { Button } from "@masterdocs/ui/components/button";
+import { Field, FieldDescription, FieldError } from "@masterdocs/ui/components/field";
+import { Input } from "@masterdocs/ui/components/input";
+import { Label } from "@masterdocs/ui/components/label";
+import { Separator } from "@masterdocs/ui/components/separator";
 
 import { trpc } from "@/utils/trpc";
 

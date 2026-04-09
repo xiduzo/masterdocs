@@ -2,9 +2,9 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@fumadocs-learning/db";
-import { user } from "@fumadocs-learning/db/schema/auth";
-import { changeRecords } from "@fumadocs-learning/db/schema/change-records";
+import { db } from "@masterdocs/db";
+import { user } from "@masterdocs/db/schema/auth";
+import { changeRecords } from "@masterdocs/db/schema/change-records";
 
 import { protectedProcedure, router } from "../index";
 import { createGitHubService } from "../lib/github";
@@ -41,7 +41,10 @@ export const contentRouter = router({
 
     const pendingMap = new Map(pendingRecords.map((r) => [r.filePath, r.branchName]));
 
-    // 3. For each roadmap dir, list MDX files and fetch their titles
+    // 3. Collect the set of roadmap dir names we already know about
+    const roadmapDirNames = new Set(roadmapDirs.map((d) => d.path.split("/").pop()!));
+
+    // 4. For each roadmap dir, list MDX files and fetch their titles
     const results = await Promise.all(
       roadmapDirs.map(async (dir) => {
         const dirName = dir.path.split("/").pop()!;
@@ -49,6 +52,9 @@ export const contentRouter = router({
         const mdxFiles = entries.filter(
           (e) => e.type === "file" && e.path.endsWith(".mdx"),
         );
+
+        // Track which file paths we've already seen on main
+        const seenPaths = new Set(mdxFiles.map((f) => f.path));
 
         const files = await Promise.all(
           mdxFiles.map(async (file) => {
@@ -83,11 +89,101 @@ export const contentRouter = router({
           }),
         );
 
+        // 5. Add pending files that only exist on feature branches (not yet on main)
+        const pendingOnlyFiles = await Promise.all(
+          [...pendingMap.entries()]
+            .filter(([filePath]) => {
+              if (seenPaths.has(filePath)) return false;
+              // Check this file belongs to this roadmap dir
+              const prefix = `${contentBase}/${dirName}/`;
+              return filePath.startsWith(prefix) && filePath.endsWith(".mdx");
+            })
+            .map(async ([filePath, branchName]) => {
+              const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
+              let title = slug;
+              let track: string | undefined;
+              let trackTitle: string | undefined;
+              let trackOrder: number | undefined;
+              let topicOrder: number | undefined;
+              try {
+                const { content } = await github.getFileContent(filePath, branchName);
+                const parsed = parseMdx(content);
+                title = parsed.frontmatter.title || slug;
+                track = parsed.frontmatter.track;
+                trackTitle = parsed.frontmatter.trackTitle;
+                trackOrder = parsed.frontmatter.trackOrder;
+                topicOrder = parsed.frontmatter.topicOrder;
+              } catch {
+                // fall back to slug as title
+              }
+              return {
+                slug,
+                title,
+                path: filePath,
+                state: "pending_review" as const,
+                track,
+                trackTitle,
+                trackOrder,
+                topicOrder,
+              };
+            }),
+        );
+
+        return { roadmap: dirName, files: [...files, ...pendingOnlyFiles] };
+      }),
+    );
+
+    // 6. Add pending files for roadmap dirs that don't exist on main yet
+    const pendingNewRoadmaps = new Map<string, Array<{ filePath: string; branchName: string }>>();
+    for (const [filePath, branchName] of pendingMap) {
+      if (!filePath.startsWith(`${contentBase}/`) || !filePath.endsWith(".mdx")) continue;
+      const relative = filePath.slice(contentBase.length + 1); // e.g. "newroadmap/some-file.mdx"
+      const parts = relative.split("/");
+      if (parts.length < 2) continue;
+      const dirName = parts[0];
+      if (roadmapDirNames.has(dirName)) continue; // already handled above
+      if (!pendingNewRoadmaps.has(dirName)) pendingNewRoadmaps.set(dirName, []);
+      pendingNewRoadmaps.get(dirName)!.push({ filePath, branchName });
+    }
+
+    const newRoadmapResults = await Promise.all(
+      [...pendingNewRoadmaps.entries()].map(async ([dirName, entries]) => {
+        const files = await Promise.all(
+          entries.map(async ({ filePath, branchName }) => {
+            const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
+            let title = slug;
+            let track: string | undefined;
+            let trackTitle: string | undefined;
+            let trackOrder: number | undefined;
+            let topicOrder: number | undefined;
+            try {
+              const { content } = await github.getFileContent(filePath, branchName);
+              const parsed = parseMdx(content);
+              title = parsed.frontmatter.title || slug;
+              track = parsed.frontmatter.track;
+              trackTitle = parsed.frontmatter.trackTitle;
+              trackOrder = parsed.frontmatter.trackOrder;
+              topicOrder = parsed.frontmatter.topicOrder;
+            } catch {
+              // fall back to slug
+            }
+            return {
+              slug,
+              title,
+              path: filePath,
+              state: "pending_review" as const,
+              track,
+              trackTitle,
+              trackOrder,
+              topicOrder,
+            };
+          }),
+        );
         return { roadmap: dirName, files };
       }),
     );
 
-    return results;
+    return [...results, ...newRoadmapResults];
   }),
 
   listPending: adminProcedure.query(async () => {

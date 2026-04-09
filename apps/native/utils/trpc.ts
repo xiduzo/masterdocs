@@ -1,5 +1,5 @@
-import type { AppRouter } from "@fumadocs-learning/api/routers/index";
-import { env } from "@fumadocs-learning/env/native";
+import type { AppRouter } from "@masterdocs/api/routers/index";
+import { env } from "@masterdocs/env/native";
 import { QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";

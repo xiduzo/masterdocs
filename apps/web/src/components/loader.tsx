@@ -1,4 +1,4 @@
-import { Spinner } from "@fumadocs-learning/ui/components/spinner";
+import { Spinner } from "@masterdocs/ui/components/spinner";
 
 export default function Loader() {
   return (

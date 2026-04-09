@@ -43,20 +43,18 @@ export function RoadmapCard({
       {description && (
         <p className="text-sm text-fd-muted-foreground">{description}</p>
       )}
-      {total > 0 && (
-        <div className="mt-3 flex flex-col gap-1">
-          <div className="flex items-center justify-between text-xs text-fd-muted-foreground">
-            <span>Progress</span>
-            <span>{percentage}%</span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-fd-secondary">
-            <div
-              className="h-full rounded-full bg-fd-primary transition-all duration-300"
-              style={{ width: `${percentage}%` }}
-            />
-          </div>
+      <div className="mt-3 flex flex-col gap-1">
+        <div className="flex items-center justify-between text-xs text-fd-muted-foreground">
+          <span>Progress</span>
+          <span>{percentage}%</span>
         </div>
-      )}
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-fd-secondary">
+          <div
+            className="h-full rounded-full bg-fd-primary transition-all duration-300"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+      </div>
     </Link>
   );
 }

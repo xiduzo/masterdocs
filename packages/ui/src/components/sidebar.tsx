@@ -5,24 +5,24 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { useIsMobile } from "@fumadocs-learning/ui/hooks/use-mobile"
-import { cn } from "@fumadocs-learning/ui/lib/utils"
-import { Button } from "@fumadocs-learning/ui/components/button"
-import { Input } from "@fumadocs-learning/ui/components/input"
-import { Separator } from "@fumadocs-learning/ui/components/separator"
+import { useIsMobile } from "@masterdocs/ui/hooks/use-mobile"
+import { cn } from "@masterdocs/ui/lib/utils"
+import { Button } from "@masterdocs/ui/components/button"
+import { Input } from "@masterdocs/ui/components/input"
+import { Separator } from "@masterdocs/ui/components/separator"
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@fumadocs-learning/ui/components/sheet"
-import { Skeleton } from "@fumadocs-learning/ui/components/skeleton"
+} from "@masterdocs/ui/components/sheet"
+import { Skeleton } from "@masterdocs/ui/components/skeleton"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@fumadocs-learning/ui/components/tooltip"
+} from "@masterdocs/ui/components/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"

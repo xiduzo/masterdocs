@@ -1,8 +1,8 @@
-import type { MdxFrontmatter } from "@fumadocs-learning/api/lib/mdx";
-import { Field, FieldError } from "@fumadocs-learning/ui/components/field";
-import { Input } from "@fumadocs-learning/ui/components/input";
-import { Label } from "@fumadocs-learning/ui/components/label";
-import { Textarea } from "@fumadocs-learning/ui/components/textarea";
+import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
+import { Field, FieldError } from "@masterdocs/ui/components/field";
+import { Input } from "@masterdocs/ui/components/input";
+import { Label } from "@masterdocs/ui/components/label";
+import { Textarea } from "@masterdocs/ui/components/textarea";
 
 export function FrontmatterForm({
   frontmatter,

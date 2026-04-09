@@ -1,10 +1,10 @@
-import { Button } from "@fumadocs-learning/ui/components/button";
+import { Button } from "@masterdocs/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@fumadocs-learning/ui/components/dropdown-menu";
+} from "@masterdocs/ui/components/dropdown-menu";
 import { Moon, Sun } from "lucide-react";
 
 import { useTheme } from "@/components/theme-provider";

@@ -1,6 +1,6 @@
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
 
-import { cn } from "@fumadocs-learning/ui/lib/utils"
+import { cn } from "@masterdocs/ui/lib/utils"
 
 function Switch({
   className,

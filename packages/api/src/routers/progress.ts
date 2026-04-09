@@ -3,8 +3,8 @@ import { eq, and, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 import { protectedProcedure, publicProcedure, router } from "../index";
-import { db } from "@fumadocs-learning/db";
-import { skillProgress } from "@fumadocs-learning/db/schema/skill-progress";
+import { db } from "@masterdocs/db";
+import { skillProgress } from "@masterdocs/db/schema/skill-progress";
 import { getRoadmapContent } from "../lib/roadmap-content";
 
 export const progressRouter = router({

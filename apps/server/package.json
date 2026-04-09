@@ -10,10 +10,10 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
-    "@fumadocs-learning/api": "workspace:*",
-    "@fumadocs-learning/auth": "workspace:*",
-    "@fumadocs-learning/db": "workspace:*",
-    "@fumadocs-learning/env": "workspace:*",
+    "@masterdocs/api": "workspace:*",
+    "@masterdocs/auth": "workspace:*",
+    "@masterdocs/db": "workspace:*",
+    "@masterdocs/env": "workspace:*",
     "@hono/trpc-server": "^0.4.0",
     "@trpc/server": "catalog:",
     "better-auth": "catalog:",
@@ -22,7 +22,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fumadocs-learning/config": "workspace:*",
+    "@masterdocs/config": "workspace:*",
     "@types/bun": "catalog:",
     "tsdown": "^0.16.5",
     "typescript": "^5"

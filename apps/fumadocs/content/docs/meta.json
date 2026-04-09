@@ -2,6 +2,7 @@
   "pages": [
     "welcome",
     "figma",
-    "arduino"
+    "arduino",
+    "testing"
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@fumadocs-learning/env",
+  "name": "@masterdocs/env",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fumadocs-learning/config": "workspace:*",
+    "@masterdocs/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "^5"
   }

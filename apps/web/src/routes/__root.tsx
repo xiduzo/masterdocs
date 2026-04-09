@@ -1,4 +1,4 @@
-import { Toaster } from "@fumadocs-learning/ui/components/sonner";
+import { Toaster } from "@masterdocs/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
@@ -19,11 +19,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
       {
-        title: "fumadocs-learning",
+        title: "masterdocs",
       },
       {
         name: "description",
-        content: "fumadocs-learning is a web application",
+        content: "masterdocs is a web application",
       },
     ],
     links: [

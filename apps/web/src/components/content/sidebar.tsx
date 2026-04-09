@@ -2,14 +2,14 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@fumadocs-learning/ui/components/collapsible";
+} from "@masterdocs/ui/components/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuPortal,
   DropdownMenuTrigger,
-} from "@fumadocs-learning/ui/components/dropdown-menu";
+} from "@masterdocs/ui/components/dropdown-menu";
 import {
   SidebarContent,
   SidebarFooter,
@@ -24,8 +24,9 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarRail,
-} from "@fumadocs-learning/ui/components/sidebar";
-import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+} from "@masterdocs/ui/components/sidebar";
+import { Skeleton } from "@masterdocs/ui/components/skeleton";
+import { cn } from "@masterdocs/ui/lib/utils";
 import {
   DndContext,
   closestCenter,
@@ -50,6 +51,7 @@ import { ChevronRight, ClockAlert, File, Folder, FolderOpen, FolderPlus, GripVer
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { NavUser } from "@/components/content/nav-user";
 import { trpc } from "@/utils/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -415,6 +417,7 @@ export function ContentSidebar() {
             )}
           </SidebarMenuItem>
         </SidebarMenu>
+        <NavUser />
       </SidebarFooter>
 
       <SidebarRail />
@@ -505,7 +508,7 @@ function SortableFileItem({ item }: { item: FileNode }) {
         </SidebarMenuButton>
       </div>
       {item.state === "pending_review" && (
-        <SidebarMenuBadge className="text-amber-500!">●</SidebarMenuBadge>
+        <SidebarMenuBadge className="top-1.5 z-10 text-amber-500!">●</SidebarMenuBadge>
       )}
     </SidebarMenuItem>
   );
@@ -608,26 +611,28 @@ function TrackFolder({
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="group/folder-row relative">
-          {dragListeners && (
-            <button
-              type="button"
-              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none px-0.5 text-sidebar-foreground/30 opacity-0 transition-opacity group-hover/folder-row:opacity-100"
-              {...(dragListeners as React.HTMLAttributes<HTMLButtonElement>)}
-              {...(dragAttributes as React.HTMLAttributes<HTMLButtonElement>)}
-            >
-              <GripVertical className="size-3" />
-            </button>
-          )}
-          <CollapsibleTrigger render={<SidebarMenuButton />}>
-            <ChevronRight
-              className="transition-transform duration-200"
-              style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
-            />
-            {open ? <FolderOpen /> : <Folder />}
-            <span>{item.name}</span>
-          </CollapsibleTrigger>
+          <div className="group/sortable-folder flex items-center">
+            {dragListeners && (
+              <button
+                type="button"
+                className="flex shrink-0 cursor-grab touch-none items-center px-0.5 text-sidebar-foreground/30 opacity-0 transition-opacity group-hover/sortable-folder:opacity-100"
+                {...(dragListeners as React.HTMLAttributes<HTMLButtonElement>)}
+                {...(dragAttributes as React.HTMLAttributes<HTMLButtonElement>)}
+              >
+                <GripVertical className="size-3" />
+              </button>
+            )}
+            <CollapsibleTrigger render={<SidebarMenuButton className="flex-1" />}>
+              <ChevronRight
+                className="transition-transform duration-200"
+                style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+              />
+              {open ? <FolderOpen /> : <Folder />}
+              <span>{item.name}</span>
+            </CollapsibleTrigger>
+          </div>
           {hasPending && (
-            <SidebarMenuBadge className="text-amber-500! group-hover/folder-row:opacity-0">
+            <SidebarMenuBadge className="top-1.5 text-amber-500! group-hover/folder-row:opacity-0">
               ●
             </SidebarMenuBadge>
           )}
@@ -643,7 +648,7 @@ function TrackFolder({
           </SidebarMenuAction>
         </div>
         <CollapsibleContent>
-          <SidebarMenuSub className="mr-0 pr-0">
+          <SidebarMenuSub className={cn(dragListeners && "ml-8", "mr-0 pr-0")}>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -688,7 +693,33 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
   const roadmapName = item.roadmap ?? item.name;
   const fileChildren = item.children.filter((c): c is FileNode => c.type === "file");
   const trackChildren = item.children.filter((c): c is FolderNode => c.type === "folder");
+  const fileIds = fileChildren.map((f) => f.slug);
   const trackIds = trackChildren.map((t) => t.track ?? t.name);
+
+  const handleFileDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = fileChildren.findIndex((f) => f.slug === active.id);
+    const newIndex = fileChildren.findIndex((f) => f.slug === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(fileChildren, oldIndex, newIndex);
+    const items = reordered.map((f, i) => ({
+      slug: f.slug,
+      topicOrder: i + 1,
+    }));
+
+    reorderMutation.mutate(
+      { roadmap: roadmapName, items },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+        },
+        onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+      },
+    );
+  };
 
   const handleTrackDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -742,7 +773,7 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
             <span>{item.name}</span>
           </CollapsibleTrigger>
           {hasPending && (
-            <SidebarMenuBadge className="text-amber-500! group-hover/folder-row:opacity-0">
+            <SidebarMenuBadge className="top-1.5 text-amber-500! group-hover/folder-row:opacity-0">
               ●
             </SidebarMenuBadge>
           )}
@@ -773,10 +804,18 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
         </div>
         <CollapsibleContent>
           <SidebarMenuSub className="mr-0 pr-0">
-            {/* Untracked files (not draggable at roadmap level) */}
-            {fileChildren.map((child) => (
-              <Tree key={child.slug} item={child} />
-            ))}
+            {/* Untracked files — drag to reorder */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleFileDragEnd}
+            >
+              <SortableContext items={fileIds} strategy={verticalListSortingStrategy}>
+                {fileChildren.map((child) => (
+                  <SortableFileItem key={child.slug} item={child} />
+                ))}
+              </SortableContext>
+            </DndContext>
             {/* Track folders — drag to reorder */}
             <DndContext
               sensors={sensors}

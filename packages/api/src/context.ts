@@ -1,4 +1,4 @@
-import { auth } from "@fumadocs-learning/auth";
+import { auth } from "@masterdocs/auth";
 import type { Context as HonoContext } from "hono";
 
 export type CreateContextOptions = {

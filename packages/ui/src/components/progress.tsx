@@ -2,7 +2,7 @@
 
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
 
-import { cn } from "@fumadocs-learning/ui/lib/utils"
+import { cn } from "@masterdocs/ui/lib/utils"
 
 function Progress({
   className,

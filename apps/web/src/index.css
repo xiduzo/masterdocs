@@ -1,4 +1,4 @@
-@import "@fumadocs-learning/ui/globals.css";
+@import "@masterdocs/ui/globals.css";
 @plugin "@tailwindcss/typography";
 
 /* ── MDXEditor dark theme ─────────────────────────────────────────────── */
@@ -44,6 +44,42 @@
 .dark-theme .mdxeditor {
   border: 1px solid #27272a;
   border-radius: 0.375rem;
+}
+
+/* Ensure MDXEditor popups (link dialog, tooltips) render above the sidebar (z-10).
+   !important needed because @mdxeditor/editor/style.css is lazy-loaded after
+   index.css, so its ._popupContainer class (z-index:2) would win by source order. */
+.mdxeditor-popup-container {
+  z-index: 50 !important;
+  position: fixed !important;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mdxeditor-popup-container > * {
+  pointer-events: auto;
+}
+
+/* BlockTypeSelect trigger + dropdown dark-mode overrides */
+.dark-theme [class*="_selectTrigger"] {
+  background-color: #18181b;
+  color: #e4e4e7;
+}
+
+.dark-theme .mdxeditor-select-content,
+.dark-theme [class*="_selectContainer"] {
+  background-color: #09090b;
+  color: #e4e4e7;
+  border: 1px solid #3f3f46;
+}
+
+.dark-theme [class*="_selectItem"][data-highlighted] {
+  background-color: #27272a;
+}
+
+.dark-theme [class*="_selectItem"][data-state="checked"] {
+  background-color: #27272a;
+  color: #fafafa;
 }
 
 /* ── Slash command menu ───────────────────────────────────────────────── */

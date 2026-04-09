@@ -13,7 +13,7 @@
   "$schema": "https://r2.better-t-stack.dev/schema.json",
   "version": "3.27.0",
   "createdAt": "2026-04-07T15:39:16.391Z",
-  "reproducibleCommand": "bun create better-t-stack@latest fumadocs-learning --frontend tanstack-router native-uniwind --backend hono --runtime bun --database postgres --orm drizzle --api trpc --auth better-auth --payments none --addons turborepo fumadocs pwa --examples none --db-setup docker --web-deploy none --server-deploy none --git --package-manager bun --install",
+  "reproducibleCommand": "bun create better-t-stack@latest masterdocs --frontend tanstack-router native-uniwind --backend hono --runtime bun --database postgres --orm drizzle --api trpc --auth better-auth --payments none --addons turborepo fumadocs pwa --examples none --db-setup docker --web-deploy none --server-deploy none --git --package-manager bun --install",
   "database": "postgres",
   "orm": "drizzle",
   "backend": "hono",

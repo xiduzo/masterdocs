@@ -1,4 +1,4 @@
-import { env } from "@fumadocs-learning/env/server";
+import { env } from "@masterdocs/env/server";
 import { drizzle } from "drizzle-orm/node-postgres";
 
 import * as schema from "./schema";

@@ -21,15 +21,15 @@ import {
   Puzzle,
   Youtube,
 } from "lucide-react";
-import { Button } from "@fumadocs-learning/ui/components/button";
-import { Input } from "@fumadocs-learning/ui/components/input";
-import { Label } from "@fumadocs-learning/ui/components/label";
-import { Field } from "@fumadocs-learning/ui/components/field";
+import { Button } from "@masterdocs/ui/components/button";
+import { Input } from "@masterdocs/ui/components/input";
+import { Label } from "@masterdocs/ui/components/label";
+import { Field } from "@masterdocs/ui/components/field";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@fumadocs-learning/ui/components/popover";
+} from "@masterdocs/ui/components/popover";
 
 export interface BodyEditorHandle {
   getCursorPosition: () => number;

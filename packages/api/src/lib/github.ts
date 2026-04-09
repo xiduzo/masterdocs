@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import { env } from "@fumadocs-learning/env/server";
+import { env } from "@masterdocs/env/server";
 
 // ---------------------------------------------------------------------------
 // Types

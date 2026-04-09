@@ -12,11 +12,11 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@fumadocs-learning/ui/components",
-    "utils": "@fumadocs-learning/ui/lib/utils",
-    "hooks": "@fumadocs-learning/ui/hooks",
-    "lib": "@fumadocs-learning/ui/lib",
-    "ui": "@fumadocs-learning/ui/components"
+    "components": "@masterdocs/ui/components",
+    "utils": "@masterdocs/ui/lib/utils",
+    "hooks": "@masterdocs/ui/hooks",
+    "lib": "@masterdocs/ui/lib",
+    "ui": "@masterdocs/ui/components"
   },
   "menuColor": "default",
   "menuAccent": "subtle",

@@ -1,4 +1,4 @@
-import { Button } from "@fumadocs-learning/ui/components/button";
+import { Button } from "@masterdocs/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,8 +7,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@fumadocs-learning/ui/components/dropdown-menu";
-import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+} from "@masterdocs/ui/components/dropdown-menu";
+import { Skeleton } from "@masterdocs/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";

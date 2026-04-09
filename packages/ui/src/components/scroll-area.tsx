@@ -1,7 +1,7 @@
 import * as React from "react"
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area"
 
-import { cn } from "@fumadocs-learning/ui/lib/utils"
+import { cn } from "@masterdocs/ui/lib/utils"
 
 function ScrollArea({
   className,

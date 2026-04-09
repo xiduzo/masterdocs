@@ -3,7 +3,7 @@
 Turborepo monorepo with four apps and six shared packages. All workspace references use `workspace:*`.
 
 ```
-fumadocs-learning/
+masterdocs/
 ├── apps/
 │   ├── fumadocs/              # Docs site (Next.js + Fumadocs)
 │   │   ├── content/
@@ -69,15 +69,15 @@ fumadocs-learning/
 │
 ├── turbo.json                 # Turborepo task pipeline config
 ├── package.json               # Root workspace config with bun catalog
-└── tsconfig.json              # Extends @fumadocs-learning/config/tsconfig.base.json
+└── tsconfig.json              # Extends @masterdocs/config/tsconfig.base.json
 ```
 
 ## Key Patterns
 
-- **Package imports**: Use `@fumadocs-learning/<package>` namespace (e.g. `@fumadocs-learning/ui/components/button`, `@fumadocs-learning/api/routers/index`)
+- **Package imports**: Use `@masterdocs/<package>` namespace (e.g. `@masterdocs/ui/components/button`, `@masterdocs/api/routers/index`)
 - **Package exports**: Each package uses `exports` field in package.json — import from subpaths, not barrel files where subpath exports exist
 - **tRPC flow**: Routers defined in `packages/api` → mounted on Hono in `apps/server` → consumed by all client apps via tRPC client
 - **Auth flow**: Config in `packages/auth` → mounted as Hono middleware in `apps/server` → client-side auth via Better Auth client SDK
 - **DB schema**: All tables in `packages/db/src/schema/` → exported via `packages/db/src/schema/index.ts`
 - **MDX content**: Docs pages in `apps/fumadocs/content/docs/<roadmap>/` use extended frontmatter (`roadmap`, `track`, `trackTitle`, `trackOrder`, `topicOrder`) to associate with roadmaps
-- **Shared UI**: Add components to `packages/ui` with `npx shadcn@latest add <name> -c packages/ui`. Import as `@fumadocs-learning/ui/components/<name>`
+- **Shared UI**: Add components to `packages/ui` with `npx shadcn@latest add <name> -c packages/ui`. Import as `@masterdocs/ui/components/<name>`

@@ -83,41 +83,49 @@ export default async function RoadmapViewPage({ params }: RoadmapViewPageProps) 
 
         <ProgressBar skillIds={allSkillIds} label="Overall Progress" />
 
-        <div className="mt-8 flex flex-col gap-8">
-          {roadmap.tracks.map((track) => {
-            const trackSkillIds = track.topics.flatMap(
-              (topic) => topic.skillIds,
-            );
+        {roadmap.tracks.length === 0 ? (
+          <div className="mt-8 rounded-lg border border-dashed border-fd-border bg-fd-card p-8 text-center">
+            <p className="text-fd-muted-foreground">
+              No content has been added to this roadmap yet. Check back soon!
+            </p>
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col gap-8">
+            {roadmap.tracks.map((track) => {
+              const trackSkillIds = track.topics.flatMap(
+                (topic) => topic.skillIds,
+              );
 
-            return (
-              <section
-                key={track.slug}
-                className="rounded-lg border border-fd-border bg-fd-card p-5 shadow-sm"
-              >
-                <h2 className="mb-1 text-lg font-semibold text-fd-foreground">
-                  {track.title}
-                </h2>
+              return (
+                <section
+                  key={track.slug}
+                  className="rounded-lg border border-fd-border bg-fd-card p-5 shadow-sm"
+                >
+                  <h2 className="mb-1 text-lg font-semibold text-fd-foreground">
+                    {track.title}
+                  </h2>
 
-                <ProgressBar skillIds={trackSkillIds} label={track.title} />
+                  <ProgressBar skillIds={trackSkillIds} label={track.title} />
 
-                <ul className="mt-4 flex flex-col gap-2">
-                  {track.topics.map((topic) => (
-                    <TopicRow
-                      key={topic.slug}
-                      title={topic.title}
-                      url={topic.url}
-                      skillIds={topic.skillIds}
-                      serverCompleted={
-                        topic.skillIds.filter((id) => serverCompletedSet.has(id)).length
-                      }
-                      isAuthenticated={isAuthenticated}
-                    />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
+                  <ul className="mt-4 flex flex-col gap-2">
+                    {track.topics.map((topic) => (
+                      <TopicRow
+                        key={topic.slug}
+                        title={topic.title}
+                        url={topic.url}
+                        skillIds={topic.skillIds}
+                        serverCompleted={
+                          topic.skillIds.filter((id) => serverCompletedSet.has(id)).length
+                        }
+                        isAuthenticated={isAuthenticated}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

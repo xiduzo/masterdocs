@@ -1,10 +1,10 @@
-import { Badge } from "@fumadocs-learning/ui/components/badge";
-import { Button } from "@fumadocs-learning/ui/components/button";
-import { Card, CardContent } from "@fumadocs-learning/ui/components/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@fumadocs-learning/ui/components/empty";
-import { Separator } from "@fumadocs-learning/ui/components/separator";
-import { SidebarTrigger } from "@fumadocs-learning/ui/components/sidebar";
-import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
+import { Badge } from "@masterdocs/ui/components/badge";
+import { Button } from "@masterdocs/ui/components/button";
+import { Card, CardContent } from "@masterdocs/ui/components/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@masterdocs/ui/components/empty";
+import { Separator } from "@masterdocs/ui/components/separator";
+import { SidebarTrigger } from "@masterdocs/ui/components/sidebar";
+import { Skeleton } from "@masterdocs/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { InboxIcon } from "lucide-react";

@@ -1,5 +1,5 @@
-import { Card } from "@fumadocs-learning/ui/components/card";
-import { ScrollArea } from "@fumadocs-learning/ui/components/scroll-area";
+import { Card } from "@masterdocs/ui/components/card";
+import { ScrollArea } from "@masterdocs/ui/components/scroll-area";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";

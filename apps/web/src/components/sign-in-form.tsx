@@ -1,15 +1,16 @@
-import { Button } from "@fumadocs-learning/ui/components/button";
+import { useState } from "react";
+
+import { Button } from "@masterdocs/ui/components/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
-} from "@fumadocs-learning/ui/components/card";
-import { Field, FieldError } from "@fumadocs-learning/ui/components/field";
-import { Input } from "@fumadocs-learning/ui/components/input";
-import { Label } from "@fumadocs-learning/ui/components/label";
+} from "@masterdocs/ui/components/card";
+import { Field, FieldError } from "@masterdocs/ui/components/field";
+import { Input } from "@masterdocs/ui/components/input";
+import { Label } from "@masterdocs/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -19,28 +20,48 @@ import { authClient } from "@/lib/auth-client";
 
 import Loader from "./loader";
 
-export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () => void }) {
-  const navigate = useNavigate({
-    from: "/",
-  });
+export default function SignInForm() {
+  const navigate = useNavigate({ from: "/" });
   const { isPending } = authClient.useSession();
+  const [step, setStep] = useState<"email" | "otp">("email");
+  const [email, setEmail] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
-  const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+  const emailForm = useForm({
+    defaultValues: { email: "" },
     onSubmit: async ({ value }) => {
-      await authClient.signIn.email(
-        {
+      setIsSending(true);
+      try {
+        const { error } = await authClient.emailOtp.sendVerificationOtp({
           email: value.email,
-          password: value.password,
-        },
+          type: "sign-in",
+        });
+        if (error) {
+          toast.error(error.message || error.statusText);
+          return;
+        }
+        setEmail(value.email);
+        setStep("otp");
+        toast.success("Verification code sent to your email");
+      } finally {
+        setIsSending(false);
+      }
+    },
+    validators: {
+      onSubmit: z.object({
+        email: z.email("Invalid email address"),
+      }),
+    },
+  });
+
+  const otpForm = useForm({
+    defaultValues: { otp: "" },
+    onSubmit: async ({ value }) => {
+      await authClient.signIn.emailOtp(
+        { email, otp: value.otp },
         {
           onSuccess: () => {
-            navigate({
-              to: "/dashboard",
-            });
+            navigate({ to: "/dashboard" });
             toast.success("Sign in successful");
           },
           onError: (error) => {
@@ -51,8 +72,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
     },
     validators: {
       onSubmit: z.object({
-        email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        otp: z.string().length(6, "Enter the 6-digit code"),
       }),
     },
   });
@@ -64,73 +84,97 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
   return (
     <Card className="mx-auto w-full mt-10 max-w-md">
       <CardHeader>
-        <CardTitle className="text-center text-3xl font-bold">Welcome Back</CardTitle>
-        <CardDescription className="text-center">Sign in to your account</CardDescription>
+        <CardTitle className="text-center text-3xl font-bold">
+          {step === "email" ? "Sign In" : "Enter Code"}
+        </CardTitle>
+        <CardDescription className="text-center">
+          {step === "email"
+            ? "We'll send a verification code to your email"
+            : `Enter the 6-digit code sent to ${email}`}
+        </CardDescription>
       </CardHeader>
 
       <CardContent>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            form.handleSubmit();
-          }}
-          className="space-y-4"
-        >
-          <form.Field name="email">
-            {(field) => (
-              <Field>
-                <Label htmlFor={field.name}>Email</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                <FieldError errors={field.state.meta.errors} />
-              </Field>
-            )}
-          </form.Field>
-
-          <form.Field name="password">
-            {(field) => (
-              <Field>
-                <Label htmlFor={field.name}>Password</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                <FieldError errors={field.state.meta.errors} />
-              </Field>
-            )}
-          </form.Field>
-
-          <form.Subscribe
-            selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+        {step === "email" ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              emailForm.handleSubmit();
+            }}
+            className="space-y-4"
           >
-            {({ canSubmit, isSubmitting }) => (
-              <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-                {isSubmitting ? "Submitting..." : "Sign In"}
-              </Button>
-            )}
-          </form.Subscribe>
-        </form>
-      </CardContent>
+            <emailForm.Field name="email">
+              {(field) => (
+                <Field>
+                  <Label htmlFor={field.name}>Email</Label>
+                  <Input
+                    id={field.name}
+                    name={field.name}
+                    type="email"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  <FieldError errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </emailForm.Field>
 
-      <CardFooter className="justify-center">
-        <Button
-          variant="link"
-          onClick={onSwitchToSignUp}
-        >
-          Need an account? Sign Up
-        </Button>
-      </CardFooter>
+            <Button type="submit" className="w-full" disabled={isSending}>
+              {isSending ? "Sending..." : "Send Code"}
+            </Button>
+          </form>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              otpForm.handleSubmit();
+            }}
+            className="space-y-4"
+          >
+            <otpForm.Field name="otp">
+              {(field) => (
+                <Field>
+                  <Label htmlFor={field.name}>Verification Code</Label>
+                  <Input
+                    id={field.name}
+                    name={field.name}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  <FieldError errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </otpForm.Field>
+
+            <otpForm.Subscribe
+              selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+            >
+              {({ canSubmit, isSubmitting }) => (
+                <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
+                  {isSubmitting ? "Verifying..." : "Verify & Sign In"}
+                </Button>
+              )}
+            </otpForm.Subscribe>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => setStep("email")}
+            >
+              Use a different email
+            </Button>
+          </form>
+        )}
+      </CardContent>
     </Card>
   );
 }

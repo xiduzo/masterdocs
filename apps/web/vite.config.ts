@@ -14,9 +14,9 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "fumadocs-learning",
-        short_name: "fumadocs-learning",
-        description: "fumadocs-learning - PWA Application",
+        name: "masterdocs",
+        short_name: "masterdocs",
+        description: "masterdocs - PWA Application",
         theme_color: "#0c0c0c",
       },
       pwaAssets: { disabled: false, config: true },

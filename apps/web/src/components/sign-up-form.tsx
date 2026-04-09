@@ -1,4 +1,4 @@
-import { Button } from "@fumadocs-learning/ui/components/button";
+import { Button } from "@masterdocs/ui/components/button";
 import {
   Card,
   CardContent,
@@ -6,10 +6,10 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@fumadocs-learning/ui/components/card";
-import { Field, FieldError } from "@fumadocs-learning/ui/components/field";
-import { Input } from "@fumadocs-learning/ui/components/input";
-import { Label } from "@fumadocs-learning/ui/components/label";
+} from "@masterdocs/ui/components/card";
+import { Field, FieldError } from "@masterdocs/ui/components/field";
+import { Input } from "@masterdocs/ui/components/input";
+import { Label } from "@masterdocs/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";

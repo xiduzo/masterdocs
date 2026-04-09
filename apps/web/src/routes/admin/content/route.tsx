@@ -1,13 +1,15 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@fumadocs-learning/ui/components/empty";
+import type React from "react";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@masterdocs/ui/components/empty";
 import {
   Sidebar,
   SidebarInset,
   SidebarProvider,
-} from "@fumadocs-learning/ui/components/sidebar";
+} from "@masterdocs/ui/components/sidebar";
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { ShieldAlertIcon } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
+
 import { ContentSidebar } from "@/components/content/sidebar";
 
 export const Route = createFileRoute("/admin/content")({
@@ -20,7 +22,7 @@ export const Route = createFileRoute("/admin/content")({
         throw: true,
       });
     }
-    if (session.data.user.role !== "admin") {
+    if (session.data?.user.role !== "admin") {
       return { session, accessDenied: true };
     }
     return { session, accessDenied: false };
@@ -47,11 +49,11 @@ function ContentLayout() {
   }
 
   return (
-    <SidebarProvider className="h-full min-h-0">
+    <SidebarProvider className="h-full min-h-0 overflow-hidden" style={{ "--sidebar-width": "18rem" } as React.CSSProperties}>
       <Sidebar>
         <ContentSidebar />
       </Sidebar>
-      <SidebarInset className="min-h-0 min-w-0">
+      <SidebarInset className="overflow-hidden">
         <Outlet />
       </SidebarInset>
     </SidebarProvider>

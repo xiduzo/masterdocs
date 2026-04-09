@@ -72,9 +72,9 @@ The `<Skill>` component uses Fumadocs' RSC-in-MDX support. It is an `async` serv
 
 ```tsx
 // Server Component — runs at SSR time inside MDX content
-import { db } from "@fumadocs-learning/db";
-import { skillProgress } from "@fumadocs-learning/db/schema";
-import { auth } from "@fumadocs-learning/auth";
+import { db } from "@masterdocs/db";
+import { skillProgress } from "@masterdocs/db/schema";
+import { auth } from "@masterdocs/auth";
 import { eq, and } from "drizzle-orm";
 import { headers } from "next/headers";
 import { SkillToggle } from "./skill-toggle.client";
@@ -139,9 +139,9 @@ Like `<Skill>`, the `<ProgressBar>` leverages RSC to fetch progress data server-
 
 ```tsx
 // Server Component — fetches progress at SSR time
-import { db } from "@fumadocs-learning/db";
-import { skillProgress } from "@fumadocs-learning/db/schema";
-import { auth } from "@fumadocs-learning/auth";
+import { db } from "@masterdocs/db";
+import { skillProgress } from "@masterdocs/db/schema";
+import { auth } from "@masterdocs/auth";
 import { eq, and, inArray } from "drizzle-orm";
 import { headers } from "next/headers";
 import { ProgressBarClient } from "./progress-bar.client";

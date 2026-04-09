@@ -1,5 +1,5 @@
 {
-  "name": "fumadocs-learning",
+  "name": "masterdocs",
   "private": true,
   "workspaces": {
     "packages": [
@@ -32,22 +32,22 @@
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F @fumadocs-learning/db db:push",
-    "db:studio": "turbo -F @fumadocs-learning/db db:studio",
-    "db:generate": "turbo -F @fumadocs-learning/db db:generate",
-    "db:migrate": "turbo -F @fumadocs-learning/db db:migrate",
-    "db:start": "turbo -F @fumadocs-learning/db db:start",
-    "db:watch": "turbo -F @fumadocs-learning/db db:watch",
-    "db:stop": "turbo -F @fumadocs-learning/db db:stop",
-    "db:down": "turbo -F @fumadocs-learning/db db:down"
+    "db:push": "turbo -F @masterdocs/db db:push",
+    "db:studio": "turbo -F @masterdocs/db db:studio",
+    "db:generate": "turbo -F @masterdocs/db db:generate",
+    "db:migrate": "turbo -F @masterdocs/db db:migrate",
+    "db:start": "turbo -F @masterdocs/db db:start",
+    "db:watch": "turbo -F @masterdocs/db db:watch",
+    "db:stop": "turbo -F @masterdocs/db db:stop",
+    "db:down": "turbo -F @masterdocs/db db:down"
   },
   "dependencies": {
-    "@fumadocs-learning/env": "workspace:*",
+    "@masterdocs/env": "workspace:*",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fumadocs-learning/config": "workspace:*",
+    "@masterdocs/config": "workspace:*",
     "@types/bun": "catalog:",
     "turbo": "^2.8.12",
     "typescript": "^5"

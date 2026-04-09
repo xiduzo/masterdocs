@@ -1,5 +1,5 @@
 {
-  "name": "@fumadocs-learning/api",
+  "name": "@masterdocs/api",
   "type": "module",
   "exports": {
     ".": {
@@ -11,9 +11,9 @@
   },
   "scripts": {},
   "dependencies": {
-    "@fumadocs-learning/auth": "workspace:*",
-    "@fumadocs-learning/db": "workspace:*",
-    "@fumadocs-learning/env": "workspace:*",
+    "@masterdocs/auth": "workspace:*",
+    "@masterdocs/db": "workspace:*",
+    "@masterdocs/env": "workspace:*",
     "@octokit/rest": "^22.0.1",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
@@ -23,7 +23,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fumadocs-learning/config": "workspace:*",
+    "@masterdocs/config": "workspace:*",
     "hono": "catalog:",
     "typescript": "^5"
   }

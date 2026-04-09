@@ -15,8 +15,8 @@
     "@better-auth/expo": "catalog:",
     "@expo/metro-runtime": "~55.0.6",
     "@expo/vector-icons": "^15.0.3",
-    "@fumadocs-learning/api": "workspace:*",
-    "@fumadocs-learning/env": "workspace:*",
+    "@masterdocs/api": "workspace:*",
+    "@masterdocs/env": "workspace:*",
     "@gorhom/bottom-sheet": "^5",
     "@react-navigation/drawer": "^7.3.9",
     "@react-navigation/elements": "^2.8.1",
@@ -56,7 +56,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fumadocs-learning/config": "workspace:*",
+    "@masterdocs/config": "workspace:*",
     "@types/node": "^24.10.0",
     "@types/react": "~19.2.10",
     "typescript": "^5"

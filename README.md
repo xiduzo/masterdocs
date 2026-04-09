@@ -1,4 +1,4 @@
-# fumadocs-learning
+# masterdocs
 
 This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Router, Hono, TRPC, and more.
 
@@ -69,7 +69,7 @@ npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
 Import shared components like this:
 
 ```tsx
-import { Button } from "@fumadocs-learning/ui/components/button";
+import { Button } from "@masterdocs/ui/components/button";
 ```
 
 ### Add app-specific blocks
@@ -79,7 +79,7 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 ## Project Structure
 
 ```
-fumadocs-learning/
+masterdocs/
 ├── apps/
 │   ├── web/         # Frontend application (React + TanStack Router)
 │   ├── native/      # Mobile application (React Native, Expo)

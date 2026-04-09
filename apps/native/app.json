@@ -1,13 +1,13 @@
 {
   "expo": {
-    "scheme": "fumadocs-learning",
+    "scheme": "masterdocs",
     "userInterfaceStyle": "automatic",
     "orientation": "default",
     "web": {
       "bundler": "metro"
     },
-    "name": "fumadocs-learning",
-    "slug": "fumadocs-learning",
+    "name": "masterdocs",
+    "slug": "masterdocs",
     "plugins": ["expo-font"],
     "experiments": {
       "typedRoutes": true,

@@ -1,17 +1,17 @@
-name: fumadocs-learning
+name: masterdocs
 
 services:
   postgres:
     image: postgres
-    container_name: fumadocs-learning-postgres
+    container_name: masterdocs-postgres
     environment:
-      POSTGRES_DB: fumadocs-learning
+      POSTGRES_DB: masterdocs
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
     volumes:
-      - fumadocs-learning_postgres_data:/var/lib/postgresql
+      - masterdocs_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -20,4 +20,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  fumadocs-learning_postgres_data:
+  masterdocs_postgres_data:

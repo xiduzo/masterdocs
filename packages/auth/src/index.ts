@@ -1,7 +1,7 @@
 import { expo } from "@better-auth/expo";
-import { createDb } from "@fumadocs-learning/db";
-import * as schema from "@fumadocs-learning/db/schema/auth";
-import { env } from "@fumadocs-learning/env/server";
+import { createDb } from "@masterdocs/db";
+import * as schema from "@masterdocs/db/schema/auth";
+import { env } from "@masterdocs/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
@@ -25,7 +25,7 @@ export function createAuth() {
     },
     trustedOrigins: [
       ...env.CORS_ORIGINS,
-      "fumadocs-learning://",
+      "masterdocs://",
       ...(env.NODE_ENV === "development"
         ? ["exp://", "exp://**", "exp://192.168.*.*:*/**", "http://localhost:8081"]
         : []),

@@ -1,6 +1,6 @@
 # Product Overview
 
-fumadocs-learning is an interactive learning platform for technical topics (currently Arduino and Figma). It combines structured documentation with skill-tracking roadmaps so learners can follow guided paths and track their progress.
+masterdocs is an interactive learning platform for technical topics (currently Arduino and Figma). It combines structured documentation with skill-tracking roadmaps so learners can follow guided paths and track their progress.
 
 ## Core Concepts
 

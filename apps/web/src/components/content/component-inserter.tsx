@@ -1,11 +1,11 @@
 import { useState } from "react";
 
-import { Button } from "@fumadocs-learning/ui/components/button";
-import { Card, CardContent } from "@fumadocs-learning/ui/components/card";
-import { Field } from "@fumadocs-learning/ui/components/field";
-import { Input } from "@fumadocs-learning/ui/components/input";
-import { Label } from "@fumadocs-learning/ui/components/label";
-import { Toggle } from "@fumadocs-learning/ui/components/toggle";
+import { Button } from "@masterdocs/ui/components/button";
+import { Card, CardContent } from "@masterdocs/ui/components/card";
+import { Field } from "@masterdocs/ui/components/field";
+import { Input } from "@masterdocs/ui/components/input";
+import { Label } from "@masterdocs/ui/components/label";
+import { Toggle } from "@masterdocs/ui/components/toggle";
 
 type ActiveForm = "skill" | "youtube" | null;
 

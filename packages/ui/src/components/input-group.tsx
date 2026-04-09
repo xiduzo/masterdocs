@@ -3,10 +3,10 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { cn } from "@fumadocs-learning/ui/lib/utils"
-import { Button } from "@fumadocs-learning/ui/components/button"
-import { Input } from "@fumadocs-learning/ui/components/input"
-import { Textarea } from "@fumadocs-learning/ui/components/textarea"
+import { cn } from "@masterdocs/ui/lib/utils"
+import { Button } from "@masterdocs/ui/components/button"
+import { Input } from "@masterdocs/ui/components/input"
+import { Textarea } from "@masterdocs/ui/components/textarea"
 
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (

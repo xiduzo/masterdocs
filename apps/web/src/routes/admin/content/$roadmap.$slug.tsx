@@ -5,13 +5,13 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 
-import type { MdxFrontmatter } from "@fumadocs-learning/api/lib/mdx";
-import { Alert, AlertDescription, AlertTitle } from "@fumadocs-learning/ui/components/alert";
-import { Badge } from "@fumadocs-learning/ui/components/badge";
-import { Button } from "@fumadocs-learning/ui/components/button";
-import { Separator } from "@fumadocs-learning/ui/components/separator";
-import { Skeleton } from "@fumadocs-learning/ui/components/skeleton";
-import { SidebarTrigger } from "@fumadocs-learning/ui/components/sidebar";
+import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
+import { Alert, AlertDescription, AlertTitle } from "@masterdocs/ui/components/alert";
+import { Badge } from "@masterdocs/ui/components/badge";
+import { Button } from "@masterdocs/ui/components/button";
+import { Separator } from "@masterdocs/ui/components/separator";
+import { Skeleton } from "@masterdocs/ui/components/skeleton";
+import { SidebarTrigger } from "@masterdocs/ui/components/sidebar";
 
 const MdxContentEditor = lazy(() =>
   import("@/components/content/mdx-editor").then((m) => ({ default: m.ContentEditor })),
@@ -141,9 +141,9 @@ function ContentEditor() {
   const hasConflict = conflictQuery.data?.hasConflict === true;
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full overflow-hidden">
       {/* ── Center: editor / preview ── */}
-      <div className="flex flex-1 flex-col min-h-0 min-w-0">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Sticky header */}
         <div className="flex items-center gap-2 border-b bg-background px-3 py-2">
           <SidebarTrigger className="-ml-1" />
@@ -182,7 +182,7 @@ function ContentEditor() {
       </div>
 
       {/* ── Right sidebar: properties + actions ── */}
-      <aside className="flex w-72 shrink-0 flex-col min-h-0 border-l">
+      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l">
         {/* Sticky header */}
         <div className="border-b px-4 py-2">
           <span className="text-sm font-semibold">Properties</span>

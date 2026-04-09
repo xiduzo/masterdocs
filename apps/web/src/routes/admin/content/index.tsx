@@ -1,6 +1,6 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@fumadocs-learning/ui/components/empty";
-import { Separator } from "@fumadocs-learning/ui/components/separator";
-import { SidebarTrigger } from "@fumadocs-learning/ui/components/sidebar";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@masterdocs/ui/components/empty";
+import { Separator } from "@masterdocs/ui/components/separator";
+import { SidebarTrigger } from "@masterdocs/ui/components/sidebar";
 import { createFileRoute } from "@tanstack/react-router";
 import { FileTextIcon } from "lucide-react";
 

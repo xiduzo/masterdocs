@@ -1,5 +1,5 @@
 {
-  "name": "@fumadocs-learning/auth",
+  "name": "@masterdocs/auth",
   "type": "module",
   "exports": {
     ".": {
@@ -12,14 +12,14 @@
   "scripts": {},
   "dependencies": {
     "@better-auth/expo": "catalog:",
-    "@fumadocs-learning/db": "workspace:*",
-    "@fumadocs-learning/env": "workspace:*",
+    "@masterdocs/db": "workspace:*",
+    "@masterdocs/env": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fumadocs-learning/config": "workspace:*",
+    "@masterdocs/config": "workspace:*",
     "typescript": "^5"
   }
 }

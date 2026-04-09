@@ -2,12 +2,12 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import type { MdxFrontmatter } from "@fumadocs-learning/api/lib/mdx";
-import { Alert, AlertTitle } from "@fumadocs-learning/ui/components/alert";
-import { Button } from "@fumadocs-learning/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@fumadocs-learning/ui/components/card";
-import { ScrollArea } from "@fumadocs-learning/ui/components/scroll-area";
-import { Textarea } from "@fumadocs-learning/ui/components/textarea";
+import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
+import { Alert, AlertTitle } from "@masterdocs/ui/components/alert";
+import { Button } from "@masterdocs/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@masterdocs/ui/components/card";
+import { ScrollArea } from "@masterdocs/ui/components/scroll-area";
+import { Textarea } from "@masterdocs/ui/components/textarea";
 
 import { trpc } from "@/utils/trpc";
 

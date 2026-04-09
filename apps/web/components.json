@@ -13,8 +13,8 @@
   "iconLibrary": "lucide",
   "aliases": {
     "components": "@/components",
-    "utils": "@fumadocs-learning/ui/lib/utils",
-    "ui": "@fumadocs-learning/ui/components",
+    "utils": "@masterdocs/ui/lib/utils",
+    "ui": "@masterdocs/ui/components",
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
