@@ -435,6 +435,29 @@ export const contentRouter = router({
         message: `Create new content: ${defaultFrontmatter.title}`,
         branch: branchName,
       });
+
+      // Update the roadmap's meta.json to include the new page in the sidebar
+      const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/meta.json`;
+      try {
+        const { content: metaRaw, sha: metaSha } = await github.getFileContent(
+          metaPath,
+          branchName,
+        );
+        const meta = JSON.parse(metaRaw);
+        if (Array.isArray(meta.pages) && !meta.pages.includes(input.slug)) {
+          meta.pages.push(input.slug);
+          await github.createOrUpdateFile({
+            path: metaPath,
+            content: JSON.stringify(meta, null, 2) + "\n",
+            message: `Add ${input.slug} to meta.json`,
+            branch: branchName,
+            sha: metaSha,
+          });
+        }
+      } catch {
+        // If meta.json doesn't exist or can't be read, skip
+      }
+
       const pr = await github.createPullRequest({
         title: `New content: ${defaultFrontmatter.title}`,
         body: `Created new content file: ${filePath}`,
@@ -761,7 +784,7 @@ export const contentRouter = router({
 
       // 3. content/docs/{slug}/meta.json — page ordering
       const metaJson = JSON.stringify(
-        { title: input.title, pages: [] },
+        { title: input.title, pages: ["index", "...rest"] },
         null,
         2,
       ) + "\n";
@@ -771,6 +794,27 @@ export const contentRouter = router({
         message: `Create roadmap meta.json: ${input.title}`,
         branch: branchName,
       });
+
+      // 4. Update root meta.json to include the new roadmap in the sidebar
+      try {
+        const { content: rootMetaRaw, sha: rootMetaSha } = await github.getFileContent(
+          `${contentBase}/meta.json`,
+          branchName,
+        );
+        const rootMeta = JSON.parse(rootMetaRaw);
+        if (Array.isArray(rootMeta.pages) && !rootMeta.pages.includes(input.slug)) {
+          rootMeta.pages.push(input.slug);
+          await github.createOrUpdateFile({
+            path: `${contentBase}/meta.json`,
+            content: JSON.stringify(rootMeta, null, 2) + "\n",
+            message: `Add ${input.slug} to root meta.json`,
+            branch: branchName,
+            sha: rootMetaSha,
+          });
+        }
+      } catch {
+        // If root meta.json doesn't exist or can't be read, skip
+      }
 
       // 4. PR + auto-merge so the roadmap scaffold appears immediately
       const pr = await github.createPullRequest({
@@ -846,6 +890,28 @@ export const contentRouter = router({
         message: `Create new track: ${input.trackTitle}`,
         branch: branchName,
       });
+
+      // Update the roadmap's meta.json to include the new page in the sidebar
+      const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/meta.json`;
+      try {
+        const { content: metaRaw, sha: metaSha } = await github.getFileContent(
+          metaPath,
+          branchName,
+        );
+        const meta = JSON.parse(metaRaw);
+        if (Array.isArray(meta.pages) && !meta.pages.includes(fileSlug)) {
+          meta.pages.push(fileSlug);
+          await github.createOrUpdateFile({
+            path: metaPath,
+            content: JSON.stringify(meta, null, 2) + "\n",
+            message: `Add ${fileSlug} to meta.json`,
+            branch: branchName,
+            sha: metaSha,
+          });
+        }
+      } catch {
+        // If meta.json doesn't exist or can't be read, skip
+      }
 
       const pr = await github.createPullRequest({
         title: `New track: ${input.trackTitle}`,

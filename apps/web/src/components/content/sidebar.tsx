@@ -47,7 +47,7 @@ import type { DraggableAttributes } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, ClockAlert, File, Folder, FolderOpen, FolderPlus, GripVertical, Plus } from "lucide-react";
+import { ChevronRight, File, Folder, FolderOpen, FolderPlus, GripVertical, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -364,7 +364,6 @@ function InlineCreateTrack({
 
 export function ContentSidebar() {
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
-  const { data: pending } = useQuery(trpc.content.listPending.queryOptions());
   const tree = data ? buildTree(data) : [];
   const [isCreatingRoadmap, setIsCreatingRoadmap] = useState(false);
 
@@ -406,17 +405,6 @@ export function ContentSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/admin/content/pending" />}>
-              <ClockAlert className="size-4" />
-              Pending Changes
-            </SidebarMenuButton>
-            {!!pending?.length && (
-              <SidebarMenuBadge>{pending.length}</SidebarMenuBadge>
-            )}
-          </SidebarMenuItem>
-        </SidebarMenu>
         <NavUser />
       </SidebarFooter>
 

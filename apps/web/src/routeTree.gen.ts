@@ -15,7 +15,6 @@ import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as PublicDashboardRouteImport } from './routes/_public/dashboard'
 import { Route as AdminContentRouteRouteImport } from './routes/admin/content/route'
 import { Route as AdminContentIndexRouteImport } from './routes/admin/content/index'
-import { Route as AdminContentPendingRouteImport } from './routes/admin/content/pending'
 import { Route as AdminContentRoadmapSlugRouteImport } from './routes/admin/content/$roadmap.$slug'
 
 const PublicRoute = PublicRouteImport.update({
@@ -47,11 +46,6 @@ const AdminContentIndexRoute = AdminContentIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminContentRouteRoute,
 } as any)
-const AdminContentPendingRoute = AdminContentPendingRouteImport.update({
-  id: '/pending',
-  path: '/pending',
-  getParentRoute: () => AdminContentRouteRoute,
-} as any)
 const AdminContentRoadmapSlugRoute = AdminContentRoadmapSlugRouteImport.update({
   id: '/$roadmap/$slug',
   path: '/$roadmap/$slug',
@@ -63,7 +57,6 @@ export interface FileRoutesByFullPath {
   '/admin/content': typeof AdminContentRouteRouteWithChildren
   '/dashboard': typeof PublicDashboardRoute
   '/login': typeof PublicLoginRoute
-  '/admin/content/pending': typeof AdminContentPendingRoute
   '/admin/content/': typeof AdminContentIndexRoute
   '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
 }
@@ -71,7 +64,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof PublicDashboardRoute
   '/login': typeof PublicLoginRoute
   '/': typeof PublicIndexRoute
-  '/admin/content/pending': typeof AdminContentPendingRoute
   '/admin/content': typeof AdminContentIndexRoute
   '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
 }
@@ -82,7 +74,6 @@ export interface FileRoutesById {
   '/_public/dashboard': typeof PublicDashboardRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/': typeof PublicIndexRoute
-  '/admin/content/pending': typeof AdminContentPendingRoute
   '/admin/content/': typeof AdminContentIndexRoute
   '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
 }
@@ -93,7 +84,6 @@ export interface FileRouteTypes {
     | '/admin/content'
     | '/dashboard'
     | '/login'
-    | '/admin/content/pending'
     | '/admin/content/'
     | '/admin/content/$roadmap/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -101,7 +91,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/'
-    | '/admin/content/pending'
     | '/admin/content'
     | '/admin/content/$roadmap/$slug'
   id:
@@ -111,7 +100,6 @@ export interface FileRouteTypes {
     | '/_public/dashboard'
     | '/_public/login'
     | '/_public/'
-    | '/admin/content/pending'
     | '/admin/content/'
     | '/admin/content/$roadmap/$slug'
   fileRoutesById: FileRoutesById
@@ -165,13 +153,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminContentIndexRouteImport
       parentRoute: typeof AdminContentRouteRoute
     }
-    '/admin/content/pending': {
-      id: '/admin/content/pending'
-      path: '/pending'
-      fullPath: '/admin/content/pending'
-      preLoaderRoute: typeof AdminContentPendingRouteImport
-      parentRoute: typeof AdminContentRouteRoute
-    }
     '/admin/content/$roadmap/$slug': {
       id: '/admin/content/$roadmap/$slug'
       path: '/$roadmap/$slug'
@@ -198,13 +179,11 @@ const PublicRouteWithChildren =
   PublicRoute._addFileChildren(PublicRouteChildren)
 
 interface AdminContentRouteRouteChildren {
-  AdminContentPendingRoute: typeof AdminContentPendingRoute
   AdminContentIndexRoute: typeof AdminContentIndexRoute
   AdminContentRoadmapSlugRoute: typeof AdminContentRoadmapSlugRoute
 }
 
 const AdminContentRouteRouteChildren: AdminContentRouteRouteChildren = {
-  AdminContentPendingRoute: AdminContentPendingRoute,
   AdminContentIndexRoute: AdminContentIndexRoute,
   AdminContentRoadmapSlugRoute: AdminContentRoadmapSlugRoute,
 }
