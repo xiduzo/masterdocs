@@ -137,7 +137,7 @@ export function getRoadmapContent(
   const tracks: TrackContent[] = [];
 
   for (let trackIdx = 0; trackIdx < trackSlugs.length; trackIdx++) {
-    const trackSlug = trackSlugs[trackIdx];
+    const trackSlug = trackSlugs[trackIdx]!;
     const trackDir = join(roadmapDir, trackSlug);
     if (!existsSync(trackDir) || !statSync(trackDir).isDirectory()) continue;
 
@@ -150,7 +150,7 @@ export function getRoadmapContent(
     const allSkillIds: string[] = [];
 
     for (let topicIdx = 0; topicIdx < topicSlugs.length; topicIdx++) {
-      const topicSlug = topicSlugs[topicIdx];
+      const topicSlug = topicSlugs[topicIdx]!;
       const topicPath = join(trackDir, `${topicSlug}.mdx`);
       if (!existsSync(topicPath)) continue;
 

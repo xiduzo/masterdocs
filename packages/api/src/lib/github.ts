@@ -129,11 +129,11 @@ function wrapOctokitError(err: unknown): never {
 // ---------------------------------------------------------------------------
 
 export function createGitHubService(): GitHubService {
-  const token = env.GITHUB_TOKEN;
-  const owner = env.GITHUB_OWNER;
-  const repo = env.GITHUB_REPO;
+  const token = env.GITHUB_TOKEN as string;
+  const owner = env.GITHUB_OWNER as string;
+  const repo = env.GITHUB_REPO as string;
 
-  if (!token || !owner || !repo) {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPO) {
     throw new Error(
       "GitHub configuration missing — set GITHUB_TOKEN, GITHUB_OWNER, and GITHUB_REPO environment variables",
     );

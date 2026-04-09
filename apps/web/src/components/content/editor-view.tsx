@@ -62,8 +62,30 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
     queryClient.invalidateQueries({ queryKey: trpc.content.checkConflict.queryKey() });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!frontmatter || body === null) return;
+
+    await queryClient.cancelQueries({ queryKey: trpc.content.list.queryKey() });
+    const previousList = queryClient.getQueryData(trpc.content.list.queryKey());
+    queryClient.setQueryData(
+      trpc.content.list.queryKey(),
+      (groups) => {
+        if (!groups) return groups;
+        return groups.map((g) =>
+          g.roadmap === roadmap
+            ? {
+                ...g,
+                files: g.files.map((f) =>
+                  f.slug === slug && f.track === track
+                    ? { ...f, state: "pending_review" as const, title: frontmatter.title }
+                    : f,
+                ),
+              }
+            : g,
+        );
+      },
+    );
+
     submitMutation.mutate(
       { roadmap, track, slug, frontmatter, body, fileSha: data?.fileSha },
       {
@@ -73,23 +95,51 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
               ? "Submitted for review"
               : "Submission updated",
           );
-          invalidateQueries();
         },
-        onError: (err) => toast.error(`Submit failed: ${err.message}`),
+        onError: (err) => {
+          queryClient.setQueryData(trpc.content.list.queryKey(), previousList);
+          toast.error(`Submit failed: ${err.message}`);
+        },
+        onSettled: () => invalidateQueries(),
       },
     );
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!prNumber) return;
+
+    await queryClient.cancelQueries({ queryKey: trpc.content.list.queryKey() });
+    const previousList = queryClient.getQueryData(trpc.content.list.queryKey());
+    queryClient.setQueryData(
+      trpc.content.list.queryKey(),
+      (groups) => {
+        if (!groups) return groups;
+        return groups.map((g) =>
+          g.roadmap === roadmap
+            ? {
+                ...g,
+                files: g.files.map((f) =>
+                  f.slug === slug && f.track === track
+                    ? { ...f, state: "published" as const }
+                    : f,
+                ),
+              }
+            : g,
+        );
+      },
+    );
+
     publishMutation.mutate(
       { prNumber },
       {
         onSuccess: () => {
           toast.success("Published successfully");
-          invalidateQueries();
         },
-        onError: (err) => toast.error(`Publish failed: ${err.message}`),
+        onError: (err) => {
+          queryClient.setQueryData(trpc.content.list.queryKey(), previousList);
+          toast.error(`Publish failed: ${err.message}`);
+        },
+        onSettled: () => invalidateQueries(),
       },
     );
   };
