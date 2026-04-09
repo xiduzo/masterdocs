@@ -1,6 +1,7 @@
 {
   "extends": "@masterdocs/config/tsconfig.base.json",
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

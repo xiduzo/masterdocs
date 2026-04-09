@@ -47,382 +47,32 @@ import type { DraggableAttributes } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useMatchRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, File, Folder, FolderOpen, FolderPlus, GripVertical, Plus } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronRight, Ellipsis, File, Folder, FolderOpen, FolderPlus, GripVertical, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { NavUser } from "@/components/content/nav-user";
 import { trpc } from "@/utils/trpc";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { InlineCreateInput, InlineCreateRoadmap, InlineCreateTrack } from "./inline-create";
+import {
+  applyOptimisticContentListUpdate,
+  buildTree,
+  contentListQueryKey,
+  hasPendingDescendant,
+  removeFileFromGroups,
+  removeRoadmapFromGroups,
+  removeTrackFromGroups,
+  reorderRoadmapLevelFiles,
+  reorderTracks,
+  reorderTrackFiles,
+  updateRoadmapFiles,
+  type FileNode,
+  type FolderNode,
+  type TreeNode,
+} from "./tree-utils";
 
-const contentListQueryKey = trpc.content.list.queryKey();
-
-type ContentFile = {
-  slug: string;
-  title: string;
-  path: string;
-  state: "published" | "pending_review";
-  track?: string;
-  trackTitle?: string;
-};
-
-type FileNode = {
-  type: "file";
-  name: string;
-  slug: string;
-  roadmap: string;
-  state: "published" | "pending_review";
-  track?: string;
-  trackTitle?: string;
-};
-
-type FolderNode = {
-  type: "folder";
-  name: string;
-  defaultOpen?: boolean;
-  children: TreeNode[];
-  roadmap?: string;
-  track?: string;
-};
-
-type TreeNode = FileNode | FolderNode;
-type ContentListGroup = {
-  roadmap: string;
-  files: ContentFile[];
-};
-
-const SLUG_PATTERN = /^[a-z0-9-]+$/;
-
-function titleToSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function hasPendingDescendant(node: TreeNode): boolean {
-  if (node.type === "file") return node.state === "pending_review";
-  return node.children.some(hasPendingDescendant);
-}
-
-// ─── Data transform ───────────────────────────────────────────────────────────
-
-function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNode[] {
-  return groups.map((group) => {
-    const trackMap = new Map<string, ContentFile[]>();
-    const untracked: ContentFile[] = [];
-
-    for (const file of group.files) {
-      if (file.track) {
-        const bucket = trackMap.get(file.track) ?? [];
-        bucket.push(file);
-        trackMap.set(file.track, bucket);
-      } else {
-        untracked.push(file);
-      }
-    }
-
-    // Preserve API ordering (derived from meta.json)
-    const tracks = [...trackMap.entries()];
-
-    const toFileNode = (file: ContentFile): FileNode => ({
-      type: "file",
-      name: file.title,
-      slug: file.slug,
-      roadmap: group.roadmap,
-      state: file.state,
-      track: file.track,
-      trackTitle: file.trackTitle,
-    });
-
-    const children: TreeNode[] = [
-      ...untracked.map(toFileNode),
-      ...tracks.map(([trackSlug, files]) => ({
-        type: "folder" as const,
-        name: files[0]?.trackTitle ?? trackSlug,
-        children: files.map(toFileNode),
-        roadmap: group.roadmap,
-        track: trackSlug,
-      })),
-    ];
-
-    return { type: "folder", name: group.roadmap, children, roadmap: group.roadmap };
-  });
-}
-
-function updateRoadmapFiles(
-  groups: ContentListGroup[],
-  roadmap: string,
-  updateFiles: (files: ContentFile[]) => ContentFile[],
-): ContentListGroup[] {
-  return groups.map((group) => {
-    if (group.roadmap !== roadmap) return group;
-
-    return {
-      ...group,
-      files: updateFiles(group.files),
-    };
-  });
-}
-
-function reorderRoadmapLevelFiles(files: ContentFile[], orderedSlugs: string[]): ContentFile[] {
-  const untrackedFiles = files.filter((file) => !file.track);
-  const trackedFiles = files.filter((file) => file.track);
-  const fileBySlug = new Map(untrackedFiles.map((file) => [file.slug, file]));
-  const reorderedFiles = orderedSlugs
-    .map((slug) => fileBySlug.get(slug))
-    .filter((file): file is ContentFile => Boolean(file));
-  const remainingFiles = untrackedFiles.filter((file) => !orderedSlugs.includes(file.slug));
-
-  return [...reorderedFiles, ...remainingFiles, ...trackedFiles];
-}
-
-function reorderTrackFiles(files: ContentFile[], track: string, orderedSlugs: string[]): ContentFile[] {
-  const trackFiles = files.filter((file) => file.track === track);
-  const fileBySlug = new Map(trackFiles.map((file) => [file.slug, file]));
-  const reorderedFiles = orderedSlugs
-    .map((slug) => fileBySlug.get(slug))
-    .filter((file): file is ContentFile => Boolean(file));
-  const remainingFiles = trackFiles.filter((file) => !orderedSlugs.includes(file.slug));
-  const nextTrackFiles = [...reorderedFiles, ...remainingFiles];
-  let trackIndex = 0;
-
-  return files.map((file) => {
-    if (file.track !== track) return file;
-
-    const nextFile = nextTrackFiles[trackIndex];
-    trackIndex += 1;
-    return nextFile ?? file;
-  });
-}
-
-function reorderTracks(files: ContentFile[], orderedTracks: string[]): ContentFile[] {
-  const untrackedFiles = files.filter((file) => !file.track);
-  const trackFilesBySlug = new Map<string, ContentFile[]>();
-
-  for (const file of files) {
-    if (!file.track) continue;
-
-    const existingFiles = trackFilesBySlug.get(file.track) ?? [];
-    existingFiles.push(file);
-    trackFilesBySlug.set(file.track, existingFiles);
-  }
-
-  const currentTrackOrder = [...trackFilesBySlug.keys()];
-  const nextTrackOrder = [
-    ...orderedTracks.filter((track) => trackFilesBySlug.has(track)),
-    ...currentTrackOrder.filter((track) => !orderedTracks.includes(track)),
-  ];
-
-  return [
-    ...untrackedFiles,
-    ...nextTrackOrder.flatMap((track) => trackFilesBySlug.get(track) ?? []),
-  ];
-}
-
-function applyOptimisticContentListUpdate(
-  queryClient: ReturnType<typeof useQueryClient>,
-  updateGroups: (groups: ContentListGroup[]) => ContentListGroup[],
-) {
-  const previousGroups = queryClient.getQueryData<ContentListGroup[]>(contentListQueryKey);
-
-  queryClient.setQueryData<ContentListGroup[]>(contentListQueryKey, (groups) => {
-    if (!groups) return groups;
-    return updateGroups(groups);
-  });
-
-  return previousGroups;
-}
-
-// ─── Inline create input ──────────────────────────────────────────────────────
-
-function InlineCreateInput({
-  roadmap,
-  track,
-  onDone,
-}: {
-  roadmap: string;
-  track?: string;
-  onDone: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const createMutation = useMutation(trpc.content.create.mutationOptions());
-
-  const slug = titleToSlug(title);
-  const canSubmit = slug.length > 0 && SLUG_PATTERN.test(slug) && !createMutation.isPending;
-
-  const handleSubmit = () => {
-    if (!canSubmit || !track) return;
-    createMutation.mutate(
-      { roadmap, slug, track },
-      {
-        onSuccess: () => {
-          toast.success("File created");
-          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
-          onDone();
-          navigate({
-            to: "/admin/content/$roadmap/$track/$slug",
-            params: { roadmap, track, slug },
-          });
-        },
-        onError: (err) => {
-          toast.error(err.message);
-          inputRef.current?.focus();
-        },
-      },
-    );
-  };
-
-  return (
-    <SidebarMenuItem>
-      <div className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
-        <File className="size-4 shrink-0 text-sidebar-foreground/40" />
-        <input
-          ref={inputRef}
-          autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSubmit();
-            if (e.key === "Escape") onDone();
-          }}
-          onBlur={() => {
-            if (!title && !createMutation.isPending) onDone();
-          }}
-          placeholder="section name"
-          disabled={createMutation.isPending}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-        />
-      </div>
-    </SidebarMenuItem>
-  );
-}
-
-// ─── Inline create: new roadmap ───────────────────────────────────────────────
-
-function InlineCreateRoadmap({ onDone }: { onDone: () => void }) {
-  const [title, setTitle] = useState("");
-  const queryClient = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const createMutation = useMutation(trpc.content.createRoadmap.mutationOptions());
-
-  const slug = titleToSlug(title);
-  const canSubmit = slug.length > 0 && SLUG_PATTERN.test(slug) && title.trim().length > 0 && !createMutation.isPending;
-
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-    createMutation.mutate(
-      { slug, title: title.trim() },
-      {
-        onSuccess: () => {
-          toast.success("Roadmap created");
-          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
-          onDone();
-        },
-        onError: (err) => {
-          toast.error(err.message);
-          inputRef.current?.focus();
-        },
-      },
-    );
-  };
-
-  return (
-    <SidebarMenuItem>
-      <div className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
-        <Folder className="size-4 shrink-0 text-sidebar-foreground/40" />
-        <input
-          ref={inputRef}
-          autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSubmit();
-            if (e.key === "Escape") onDone();
-          }}
-          onBlur={() => {
-            if (!title && !createMutation.isPending) onDone();
-          }}
-          placeholder="Roadmap title"
-          disabled={createMutation.isPending}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-        />
-      </div>
-    </SidebarMenuItem>
-  );
-}
-
-// ─── Inline create: new track ─────────────────────────────────────────────────
-
-function InlineCreateTrack({
-  roadmap,
-  onDone,
-}: {
-  roadmap: string;
-  onDone: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const queryClient = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const createMutation = useMutation(trpc.content.createTrack.mutationOptions());
-
-  const trackSlug = titleToSlug(title);
-  const canSubmit = trackSlug.length > 0 && SLUG_PATTERN.test(trackSlug) && title.trim().length > 0 && !createMutation.isPending;
-
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-    createMutation.mutate(
-      { roadmap, trackSlug, trackTitle: title.trim() },
-      {
-        onSuccess: () => {
-          toast.success("Sub-section created");
-          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
-          onDone();
-        },
-        onError: (err) => {
-          toast.error(err.message);
-          inputRef.current?.focus();
-        },
-      },
-    );
-  };
-
-  return (
-    <SidebarMenuItem>
-      <div className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
-        <FolderPlus className="size-4 shrink-0 text-sidebar-foreground/40" />
-        <input
-          ref={inputRef}
-          autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSubmit();
-            if (e.key === "Escape") onDone();
-          }}
-          onBlur={() => {
-            if (!title && !createMutation.isPending) onDone();
-          }}
-          placeholder="Track title"
-          disabled={createMutation.isPending}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-sidebar-foreground/40 disabled:opacity-50"
-        />
-      </div>
-    </SidebarMenuItem>
-  );
-}
-
-// ─── Components ───────────────────────────────────────────────────────────────
+// ─── ContentSidebar ───────────────────────────────────────────────────────────
 
 export function ContentSidebar() {
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
@@ -475,14 +125,20 @@ export function ContentSidebar() {
   );
 }
 
-/** Recursive tree node — dispatches to FileItem or FolderItem */
+// ─── Tree dispatcher ──────────────────────────────────────────────────────────
+
 function Tree({ item, isRoadmapLevel = false }: { item: TreeNode; isRoadmapLevel?: boolean }) {
   if (item.type === "file") return <FileItem item={item} />;
   return <FolderItem item={item} isRoadmapLevel={isRoadmapLevel} />;
 }
 
+// ─── FileItem ─────────────────────────────────────────────────────────────────
+
 function FileItem({ item }: { item: FileNode }) {
   const matchRoute = useMatchRoute();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const deleteFileMutation = useMutation(trpc.content.deleteFile.mutationOptions());
   const hasTrack = !!item.track;
   const isActive = hasTrack
     ? !!matchRoute({
@@ -504,6 +160,45 @@ function FileItem({ item }: { item: FileNode }) {
         params: { roadmap: item.roadmap, slug: item.slug },
       };
 
+  const canDelete = item.slug !== "index";
+
+  const handleDeleteFile = async () => {
+    if (!canDelete || deleteFileMutation.isPending) return;
+
+    const displayPath = item.track
+      ? `${item.roadmap}/${item.track}/${item.slug}`
+      : `${item.roadmap}/${item.slug}`;
+
+    const confirmed = window.confirm(`Delete file "${displayPath}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
+    const previousGroups = applyOptimisticContentListUpdate(queryClient, (groups) =>
+      removeFileFromGroups(groups, item.roadmap, item.slug, item.track),
+    );
+
+    deleteFileMutation.mutate(
+      { roadmap: item.roadmap, track: item.track, slug: item.slug },
+      {
+        onSuccess: () => {
+          toast.success("File deleted");
+          if (isActive) {
+            navigate({ to: "/admin/content" });
+          }
+        },
+        onError: (err) => {
+          if (previousGroups) {
+            queryClient.setQueryData(contentListQueryKey, previousGroups);
+          }
+          toast.error(err.message);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
+        },
+      },
+    );
+  };
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -516,11 +211,38 @@ function FileItem({ item }: { item: FileNode }) {
       {item.state === "pending_review" && (
         <SidebarMenuBadge className="text-amber-500!">●</SidebarMenuBadge>
       )}
+      {canDelete && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuAction
+                title="File actions"
+                onClick={(e) => e.stopPropagation()}
+              />
+            }
+          >
+            <Ellipsis />
+          </DropdownMenuTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuContent side="right" align="start">
+              <DropdownMenuItem
+                onClick={handleDeleteFile}
+                disabled={deleteFileMutation.isPending}
+                className="text-red-600 focus:text-red-700"
+              >
+                <Trash2 className="size-4" />
+                Delete file
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenuPortal>
+        </DropdownMenu>
+      )}
     </SidebarMenuItem>
   );
 }
 
-/** Sortable wrapper for a file item inside a track folder */
+// ─── SortableFileItem ─────────────────────────────────────────────────────────
+
 function SortableFileItem({ item }: { item: FileNode }) {
   const isIndex = item.slug === "index";
   const {
@@ -589,7 +311,8 @@ function SortableFileItem({ item }: { item: FileNode }) {
   );
 }
 
-/** Sortable wrapper for a track folder inside a roadmap */
+// ─── SortableTrackFolder ──────────────────────────────────────────────────────
+
 function SortableTrackFolder({ item, roadmapName }: { item: FolderNode; roadmapName: string }) {
   const {
     attributes,
@@ -618,7 +341,8 @@ function SortableTrackFolder({ item, roadmapName }: { item: FolderNode; roadmapN
   );
 }
 
-/** A track folder with sortable files inside */
+// ─── TrackFolder ──────────────────────────────────────────────────────────────
+
 function TrackFolder({
   item,
   roadmapName,
@@ -636,7 +360,9 @@ function TrackFolder({
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const hasPending = item.children.some(hasPendingDescendant);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const reorderMutation = useMutation(trpc.content.reorder.mutationOptions());
+  const deleteTrackMutation = useMutation(trpc.content.deleteTrack.mutationOptions());
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -692,7 +418,42 @@ function TrackFolder({
     setIsCreatingFile(true);
   };
 
-  // Get track slug from folder node or first file child
+  const handleDeleteTrack = async () => {
+    const trackToDelete = item.track ?? fileChildren[0]?.track;
+    if (!trackToDelete || deleteTrackMutation.isPending) return;
+
+    const confirmed = window.confirm(
+      `Delete track "${item.name}" and all files inside it? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
+    const previousGroups = applyOptimisticContentListUpdate(queryClient, (groups) =>
+      removeTrackFromGroups(groups, roadmapName, trackToDelete),
+    );
+
+    deleteTrackMutation.mutate(
+      { roadmap: roadmapName, track: trackToDelete },
+      {
+        onSuccess: () => {
+          toast.success("Track deleted");
+          if (isChildActive) {
+            navigate({ to: "/admin/content" });
+          }
+        },
+        onError: (err) => {
+          if (previousGroups) {
+            queryClient.setQueryData(contentListQueryKey, previousGroups);
+          }
+          toast.error(err.message);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
+        },
+      },
+    );
+  };
+
   const trackSlug = item.track ?? fileChildren[0]?.track;
 
   return (
@@ -734,6 +495,31 @@ function TrackFolder({
           >
             <Plus />
           </SidebarMenuAction>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <SidebarMenuAction
+                  title="Track actions"
+                  className="right-7 opacity-0 group-hover/folder-row:opacity-100"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              }
+            >
+              <Ellipsis />
+            </DropdownMenuTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem
+                  onClick={handleDeleteTrack}
+                  disabled={deleteTrackMutation.isPending}
+                  className="text-red-600 focus:text-red-700"
+                >
+                  <Trash2 className="size-4" />
+                  Delete track
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenuPortal>
+          </DropdownMenu>
         </div>
         <CollapsibleContent>
           <SidebarMenuSub className={cn(dragListeners && "ml-8", "mr-0 pr-0")}>
@@ -763,6 +549,8 @@ function TrackFolder({
   );
 }
 
+// ─── RoadmapFolder ────────────────────────────────────────────────────────────
+
 function RoadmapFolder({ item }: { item: FolderNode }) {
   const { roadmap: activeRoadmap } = useParams({ strict: false }) as { roadmap?: string };
   const isChildActive = item.roadmap === activeRoadmap;
@@ -770,7 +558,9 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
   const hasPending = item.children.some(hasPendingDescendant);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const reorderMutation = useMutation(trpc.content.reorder.mutationOptions());
+  const deleteRoadmapMutation = useMutation(trpc.content.deleteRoadmap.mutationOptions());
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -833,7 +623,6 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = arrayMove(trackChildren, oldIndex, newIndex);
-    // Update trackOrder for first file of each track
     const items = reordered.flatMap((track, i) => {
       const files = track.children.filter((c): c is FileNode => c.type === "file");
       return files.map((f) => ({
@@ -868,6 +657,41 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
   const handleAddTrack = () => {
     setOpen(true);
     setIsCreatingTrack(true);
+  };
+
+  const handleDeleteRoadmap = async () => {
+    if (deleteRoadmapMutation.isPending) return;
+
+    const confirmed = window.confirm(
+      `Delete roadmap "${roadmapName}" and everything inside it? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
+    const previousGroups = applyOptimisticContentListUpdate(queryClient, (groups) =>
+      removeRoadmapFromGroups(groups, roadmapName),
+    );
+
+    deleteRoadmapMutation.mutate(
+      { roadmap: roadmapName },
+      {
+        onSuccess: () => {
+          toast.success("Roadmap deleted");
+          if (isChildActive) {
+            navigate({ to: "/admin/content" });
+          }
+        },
+        onError: (err) => {
+          if (previousGroups) {
+            queryClient.setQueryData(contentListQueryKey, previousGroups);
+          }
+          toast.error(err.message);
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
+        },
+      },
+    );
   };
 
   return (
@@ -907,10 +731,34 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
               </DropdownMenuContent>
             </DropdownMenuPortal>
           </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <SidebarMenuAction
+                  title="Roadmap actions"
+                  className="right-7 opacity-0 group-hover/folder-row:opacity-100"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              }
+            >
+              <Ellipsis />
+            </DropdownMenuTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem
+                  onClick={handleDeleteRoadmap}
+                  disabled={deleteRoadmapMutation.isPending}
+                  className="text-red-600 focus:text-red-700"
+                >
+                  <Trash2 className="size-4" />
+                  Delete roadmap
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenuPortal>
+          </DropdownMenu>
         </div>
         <CollapsibleContent>
           <SidebarMenuSub className="mr-0 pr-0">
-            {/* Untracked files — drag to reorder */}
             {indexFile && <FileItem item={indexFile} />}
             <DndContext
               sensors={sensors}
@@ -923,7 +771,6 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
                 ))}
               </SortableContext>
             </DndContext>
-            {/* Track folders — drag to reorder */}
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -952,13 +799,16 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
   );
 }
 
+// ─── FolderItem ───────────────────────────────────────────────────────────────
+
 function FolderItem({ item, isRoadmapLevel = false }: { item: FolderNode; isRoadmapLevel?: boolean }) {
   if (isRoadmapLevel) {
     return <RoadmapFolder item={item} />;
   }
-  // Non-roadmap, non-track folders fallback (shouldn't happen with current tree structure)
   return <TrackFolder item={item} roadmapName={item.roadmap ?? item.name} />;
 }
+
+// ─── SidebarSkeleton ──────────────────────────────────────────────────────────
 
 function SidebarSkeleton() {
   return (

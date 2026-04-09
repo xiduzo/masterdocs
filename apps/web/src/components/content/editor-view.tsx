@@ -1,9 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useRef, useState } from "react";
-import { toast } from "sonner";
+import { lazy, Suspense, useRef } from "react";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 
-import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
 import { Alert, AlertDescription, AlertTitle } from "@masterdocs/ui/components/alert";
 import { Badge } from "@masterdocs/ui/components/badge";
 import { Button } from "@masterdocs/ui/components/button";
@@ -15,7 +12,7 @@ const MdxContentEditor = lazy(() =>
   import("@/components/content/mdx-editor").then((m) => ({ default: m.ContentEditor })),
 );
 import { FrontmatterForm } from "@/components/content/frontmatter-form";
-import { trpc } from "@/utils/trpc";
+import { useContentEditor } from "@/hooks/use-content-editor";
 
 interface ContentEditorViewProps {
   roadmap: string;
@@ -24,139 +21,26 @@ interface ContentEditorViewProps {
   fromBranch?: boolean;
 }
 
-export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentEditorViewProps) {
-  const queryClient = useQueryClient();
+export function ContentEditorView(props: ContentEditorViewProps) {
   const editorRef = useRef<MDXEditorMethods>(null);
-
-  const { data, isLoading, error } = useQuery(
-    trpc.content.get.queryOptions({ roadmap, track, slug, fromBranch }),
-  );
-
-  const [frontmatter, setFrontmatter] = useState<MdxFrontmatter | null>(null);
-  const [body, setBody] = useState<string | null>(null);
-
-  const [initializedFor, setInitializedFor] = useState<string | null>(null);
-  const fileKey = `${roadmap}/${track ?? ""}/${slug}`;
-  if (data && initializedFor !== fileKey) {
-    setFrontmatter(data.frontmatter);
-    setBody(data.body);
-    setInitializedFor(fileKey);
-  }
-
-  const prNumber = data?.changeRecord?.prNumber;
-  const conflictQuery = useQuery({
-    ...trpc.content.checkConflict.queryOptions({
-      prNumber: prNumber!,
-    }),
-    enabled: !!prNumber,
-  });
-
-  const submitMutation = useMutation(trpc.content.submit.mutationOptions());
-  const publishMutation = useMutation(trpc.content.publish.mutationOptions());
-  const discardMutation = useMutation(trpc.content.discard.mutationOptions());
-
-  const invalidateQueries = () => {
-    queryClient.invalidateQueries({ queryKey: trpc.content.get.queryKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.content.list.queryKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.content.listPending.queryKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.content.checkConflict.queryKey() });
-  };
-
-  const handleSubmit = async () => {
-    if (!frontmatter || body === null) return;
-
-    await queryClient.cancelQueries({ queryKey: trpc.content.list.queryKey() });
-    const previousList = queryClient.getQueryData(trpc.content.list.queryKey());
-    queryClient.setQueryData(
-      trpc.content.list.queryKey(),
-      (groups) => {
-        if (!groups) return groups;
-        return groups.map((g) =>
-          g.roadmap === roadmap
-            ? {
-                ...g,
-                files: g.files.map((f) =>
-                  f.slug === slug && f.track === track
-                    ? { ...f, state: "pending_review" as const, title: frontmatter.title }
-                    : f,
-                ),
-              }
-            : g,
-        );
-      },
-    );
-
-    submitMutation.mutate(
-      { roadmap, track, slug, frontmatter, body, fileSha: data?.fileSha },
-      {
-        onSuccess: (result) => {
-          toast.success(
-            result.isNew
-              ? "Submitted for review"
-              : "Submission updated",
-          );
-        },
-        onError: (err) => {
-          queryClient.setQueryData(trpc.content.list.queryKey(), previousList);
-          toast.error(`Submit failed: ${err.message}`);
-        },
-        onSettled: () => invalidateQueries(),
-      },
-    );
-  };
-
-  const handlePublish = async () => {
-    if (!prNumber) return;
-
-    await queryClient.cancelQueries({ queryKey: trpc.content.list.queryKey() });
-    const previousList = queryClient.getQueryData(trpc.content.list.queryKey());
-    queryClient.setQueryData(
-      trpc.content.list.queryKey(),
-      (groups) => {
-        if (!groups) return groups;
-        return groups.map((g) =>
-          g.roadmap === roadmap
-            ? {
-                ...g,
-                files: g.files.map((f) =>
-                  f.slug === slug && f.track === track
-                    ? { ...f, state: "published" as const }
-                    : f,
-                ),
-              }
-            : g,
-        );
-      },
-    );
-
-    publishMutation.mutate(
-      { prNumber },
-      {
-        onSuccess: () => {
-          toast.success("Published successfully");
-        },
-        onError: (err) => {
-          queryClient.setQueryData(trpc.content.list.queryKey(), previousList);
-          toast.error(`Publish failed: ${err.message}`);
-        },
-        onSettled: () => invalidateQueries(),
-      },
-    );
-  };
-
-  const handleDiscard = () => {
-    if (!prNumber) return;
-    discardMutation.mutate(
-      { prNumber },
-      {
-        onSuccess: () => {
-          toast.success("Changes discarded");
-          invalidateQueries();
-        },
-        onError: (err) => toast.error(`Discard failed: ${err.message}`),
-      },
-    );
-  };
+  const {
+    data,
+    isLoading,
+    error,
+    frontmatter,
+    setFrontmatter,
+    body,
+    setBody,
+    isPending,
+    hasConflict,
+    displayPath,
+    handleSubmit,
+    handlePublish,
+    handleDiscard,
+    submitMutation,
+    publishMutation,
+    discardMutation,
+  } = useContentEditor(props);
 
   if (isLoading) {
     return (
@@ -181,9 +65,7 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
 
   if (!data || !frontmatter || body === null) return null;
 
-  const isPending = data.state === "pending_review";
-  const hasConflict = conflictQuery.data?.hasConflict === true;
-  const displayPath = track ? `${roadmap}/${track}/${slug}` : `${roadmap}/${slug}`;
+  const fileKey = `${props.roadmap}/${props.track ?? ""}/${props.slug}`;
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
@@ -237,7 +119,7 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
 
         {/* Scrollable frontmatter */}
         <div className="flex-1 overflow-y-auto p-4">
-          <FrontmatterForm frontmatter={frontmatter} onChange={setFrontmatter} isIndex={slug === "index"} />
+          <FrontmatterForm frontmatter={frontmatter} onChange={setFrontmatter} isIndex={props.slug === "index"} />
         </div>
 
         {/* Actions pinned to bottom */}

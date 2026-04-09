@@ -15,7 +15,8 @@ export const Route = createFileRoute("/admin/content/$roadmap/$track/$slug")({
 function ContentEditor() {
   const { roadmap, track, slug } = Route.useParams();
   const { fromBranch } = Route.useSearch();
+  const fileKey = `${roadmap}/${track}/${slug}`;
   return (
-    <ContentEditorView roadmap={roadmap} slug={slug} track={track} fromBranch={fromBranch} />
+    <ContentEditorView key={fileKey} roadmap={roadmap} slug={slug} track={track} fromBranch={fromBranch} />
   );
 }

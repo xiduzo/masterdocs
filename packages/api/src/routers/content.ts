@@ -66,6 +66,44 @@ function contentFilePath(roadmap: string, slug: string, track?: string) {
     : `${base}/${roadmap}/${slug}.mdx`;
 }
 
+const CONTENT_DOCS_BASE = "apps/fumadocs/content/docs";
+
+function removePageFromMeta(rawMeta: string, page: string): string | null {
+  try {
+    const parsed = JSON.parse(rawMeta);
+    if (!Array.isArray(parsed.pages) || !parsed.pages.includes(page)) return null;
+    parsed.pages = parsed.pages.filter((p: string) => p !== page);
+    return JSON.stringify(parsed, null, 2) + "\n";
+  } catch {
+    return null;
+  }
+}
+
+async function listFilesRecursively(
+  github: ReturnType<typeof createGitHubService>,
+  dirPath: string,
+  branch = "main",
+): Promise<string[]> {
+  const files: string[] = [];
+  const queue: string[] = [dirPath];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+
+    const entries = await github.getDirectoryTree(current, branch);
+    for (const entry of entries) {
+      if (entry.type === "file") {
+        files.push(entry.path);
+      } else if (entry.type === "dir") {
+        queue.push(entry.path);
+      }
+    }
+  }
+
+  return files;
+}
+
 export const contentRouter = router({
   list: adminProcedure.query(async () => {
     const github = createGitHubService();
@@ -797,6 +835,179 @@ export const contentRouter = router({
       }
 
       return { prNumber: pr.number, branchName };
+    }),
+
+  deleteFile: adminProcedure
+    .input(
+      z.object({
+        roadmap: z.string(),
+        track: z.string().optional(),
+        slug: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (input.slug === "index") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: 'The "index" page cannot be deleted directly. Delete the track or roadmap instead.',
+        });
+      }
+
+      const github = createGitHubService();
+      const filePath = contentFilePath(input.roadmap, input.slug, input.track);
+
+      let fileSha: string;
+      try {
+        fileSha = (await github.getFileContent(filePath, "main")).sha;
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("not found")) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "File not found" });
+        }
+        throw err;
+      }
+
+      await github.deleteFile({
+        path: filePath,
+        message: `Delete content: ${input.slug}`,
+        branch: "main",
+        sha: fileSha,
+      });
+
+      const metaPath = input.track
+        ? `${CONTENT_DOCS_BASE}/${input.roadmap}/${input.track}/meta.json`
+        : `${CONTENT_DOCS_BASE}/${input.roadmap}/meta.json`;
+
+      try {
+        const { content: metaRaw, sha: metaSha } = await github.getFileContent(metaPath, "main");
+        const updatedMeta = removePageFromMeta(metaRaw, input.slug);
+        if (updatedMeta) {
+          await github.createOrUpdateFile({
+            path: metaPath,
+            content: updatedMeta,
+            message: `Remove ${input.slug} from meta.json`,
+            branch: "main",
+            sha: metaSha,
+          });
+        }
+      } catch {
+        // Skip if meta.json is missing or invalid.
+      }
+
+      return { success: true };
+    }),
+
+  deleteTrack: adminProcedure
+    .input(
+      z.object({
+        roadmap: z.string(),
+        track: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const github = createGitHubService();
+      const trackDir = `${CONTENT_DOCS_BASE}/${input.roadmap}/${input.track}`;
+
+      try {
+        await github.getDirectoryTree(trackDir, "main");
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("not found")) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Track not found" });
+        }
+        throw err;
+      }
+
+      const trackFiles = await listFilesRecursively(github, trackDir, "main");
+      for (const filePath of trackFiles.sort((a, b) => b.length - a.length)) {
+        const { sha } = await github.getFileContent(filePath, "main");
+        await github.deleteFile({
+          path: filePath,
+          message: `Delete track file: ${filePath}`,
+          branch: "main",
+          sha,
+        });
+      }
+
+      const roadmapMetaPath = `${CONTENT_DOCS_BASE}/${input.roadmap}/meta.json`;
+      try {
+        const { content: metaRaw, sha: metaSha } = await github.getFileContent(roadmapMetaPath, "main");
+        const updatedMeta = removePageFromMeta(metaRaw, input.track);
+        if (updatedMeta) {
+          await github.createOrUpdateFile({
+            path: roadmapMetaPath,
+            content: updatedMeta,
+            message: `Remove track ${input.track} from roadmap meta.json`,
+            branch: "main",
+            sha: metaSha,
+          });
+        }
+      } catch {
+        // Skip if meta.json is missing or invalid.
+      }
+
+      return { success: true, deletedFiles: trackFiles.length };
+    }),
+
+  deleteRoadmap: adminProcedure
+    .input(
+      z.object({
+        roadmap: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const github = createGitHubService();
+      const roadmapDir = `${CONTENT_DOCS_BASE}/${input.roadmap}`;
+
+      try {
+        await github.getDirectoryTree(roadmapDir, "main");
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("not found")) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Roadmap not found" });
+        }
+        throw err;
+      }
+
+      const roadmapFiles = await listFilesRecursively(github, roadmapDir, "main");
+      for (const filePath of roadmapFiles.sort((a, b) => b.length - a.length)) {
+        const { sha } = await github.getFileContent(filePath, "main");
+        await github.deleteFile({
+          path: filePath,
+          message: `Delete roadmap file: ${filePath}`,
+          branch: "main",
+          sha,
+        });
+      }
+
+      const roadmapMetaPath = `apps/fumadocs/content/roadmaps/${input.roadmap}.mdx`;
+      try {
+        const { sha } = await github.getFileContent(roadmapMetaPath, "main");
+        await github.deleteFile({
+          path: roadmapMetaPath,
+          message: `Delete roadmap metadata: ${input.roadmap}`,
+          branch: "main",
+          sha,
+        });
+      } catch {
+        // Skip if metadata file does not exist.
+      }
+
+      const rootMetaPath = `${CONTENT_DOCS_BASE}/meta.json`;
+      try {
+        const { content: rootMetaRaw, sha: rootMetaSha } = await github.getFileContent(rootMetaPath, "main");
+        const updatedRootMeta = removePageFromMeta(rootMetaRaw, input.roadmap);
+        if (updatedRootMeta) {
+          await github.createOrUpdateFile({
+            path: rootMetaPath,
+            content: updatedRootMeta,
+            message: `Remove roadmap ${input.roadmap} from root meta.json`,
+            branch: "main",
+            sha: rootMetaSha,
+          });
+        }
+      } catch {
+        // Skip if root meta.json is missing or invalid.
+      }
+
+      return { success: true, deletedFiles: roadmapFiles.length };
     }),
 
   /** Reorder tracks and/or topics within a roadmap. Updates meta.json files directly on main. */

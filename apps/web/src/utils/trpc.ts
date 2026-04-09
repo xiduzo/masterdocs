@@ -3,11 +3,15 @@ import { env } from "@masterdocs/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
+import type { inferRouterOutputs } from "@trpc/server";
 import { toast } from "sonner";
+
+export type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
+      if (query.meta?.silentError) return;
       toast.error(error.message, {
         action: {
           label: "retry",

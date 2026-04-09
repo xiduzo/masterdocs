@@ -45,6 +45,12 @@ export interface GitHubService {
     branch: string;
     sha?: string;
   }): Promise<{ sha: string }>;
+  deleteFile(params: {
+    path: string;
+    message: string;
+    branch: string;
+    sha?: string;
+  }): Promise<void>;
 
   // PR operations
   listContentPRs(): Promise<ContentPR[]>;
@@ -283,6 +289,30 @@ export function createGitHubService(): GitHubService {
     }
   }
 
+  async function deleteFile(params: {
+    path: string;
+    message: string;
+    branch: string;
+    sha?: string;
+  }): Promise<void> {
+    try {
+      const fileSha = params.sha
+        ? params.sha
+        : (await getFileContent(params.path, params.branch)).sha;
+
+      await octokit.repos.deleteFile({
+        owner,
+        repo,
+        path: params.path,
+        message: params.message,
+        sha: fileSha,
+        branch: params.branch,
+      });
+    } catch (err) {
+      return wrapOctokitError(err);
+    }
+  }
+
   // -----------------------------------------------------------------------
   // PR operations
   // -----------------------------------------------------------------------
@@ -457,6 +487,7 @@ export function createGitHubService(): GitHubService {
     deleteBranch,
     branchExists,
     createOrUpdateFile,
+    deleteFile,
     listContentPRs,
     getPRByBranch,
     getPR,
