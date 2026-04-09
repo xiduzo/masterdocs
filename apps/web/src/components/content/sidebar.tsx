@@ -56,6 +56,8 @@ import { trpc } from "@/utils/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+const contentListQueryKey = trpc.content.list.queryKey();
+
 type ContentFile = {
   slug: string;
   title: string;
@@ -85,6 +87,10 @@ type FolderNode = {
 };
 
 type TreeNode = FileNode | FolderNode;
+type ContentListGroup = {
+  roadmap: string;
+  files: ContentFile[];
+};
 
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
 
@@ -148,6 +154,90 @@ function buildTree(groups: { roadmap: string; files: ContentFile[] }[]): TreeNod
   });
 }
 
+function updateRoadmapFiles(
+  groups: ContentListGroup[],
+  roadmap: string,
+  updateFiles: (files: ContentFile[]) => ContentFile[],
+): ContentListGroup[] {
+  return groups.map((group) => {
+    if (group.roadmap !== roadmap) return group;
+
+    return {
+      ...group,
+      files: updateFiles(group.files),
+    };
+  });
+}
+
+function reorderRoadmapLevelFiles(files: ContentFile[], orderedSlugs: string[]): ContentFile[] {
+  const untrackedFiles = files.filter((file) => !file.track);
+  const trackedFiles = files.filter((file) => file.track);
+  const fileBySlug = new Map(untrackedFiles.map((file) => [file.slug, file]));
+  const reorderedFiles = orderedSlugs
+    .map((slug) => fileBySlug.get(slug))
+    .filter((file): file is ContentFile => Boolean(file));
+  const remainingFiles = untrackedFiles.filter((file) => !orderedSlugs.includes(file.slug));
+
+  return [...reorderedFiles, ...remainingFiles, ...trackedFiles];
+}
+
+function reorderTrackFiles(files: ContentFile[], track: string, orderedSlugs: string[]): ContentFile[] {
+  const trackFiles = files.filter((file) => file.track === track);
+  const fileBySlug = new Map(trackFiles.map((file) => [file.slug, file]));
+  const reorderedFiles = orderedSlugs
+    .map((slug) => fileBySlug.get(slug))
+    .filter((file): file is ContentFile => Boolean(file));
+  const remainingFiles = trackFiles.filter((file) => !orderedSlugs.includes(file.slug));
+  const nextTrackFiles = [...reorderedFiles, ...remainingFiles];
+  let trackIndex = 0;
+
+  return files.map((file) => {
+    if (file.track !== track) return file;
+
+    const nextFile = nextTrackFiles[trackIndex];
+    trackIndex += 1;
+    return nextFile ?? file;
+  });
+}
+
+function reorderTracks(files: ContentFile[], orderedTracks: string[]): ContentFile[] {
+  const untrackedFiles = files.filter((file) => !file.track);
+  const trackFilesBySlug = new Map<string, ContentFile[]>();
+
+  for (const file of files) {
+    if (!file.track) continue;
+
+    const existingFiles = trackFilesBySlug.get(file.track) ?? [];
+    existingFiles.push(file);
+    trackFilesBySlug.set(file.track, existingFiles);
+  }
+
+  const currentTrackOrder = [...trackFilesBySlug.keys()];
+  const nextTrackOrder = [
+    ...orderedTracks.filter((track) => trackFilesBySlug.has(track)),
+    ...currentTrackOrder.filter((track) => !orderedTracks.includes(track)),
+  ];
+
+  return [
+    ...untrackedFiles,
+    ...nextTrackOrder.flatMap((track) => trackFilesBySlug.get(track) ?? []),
+  ];
+}
+
+function applyOptimisticContentListUpdate(
+  queryClient: ReturnType<typeof useQueryClient>,
+  updateGroups: (groups: ContentListGroup[]) => ContentListGroup[],
+) {
+  const previousGroups = queryClient.getQueryData<ContentListGroup[]>(contentListQueryKey);
+
+  queryClient.setQueryData<ContentListGroup[]>(contentListQueryKey, (groups) => {
+    if (!groups) return groups;
+    return updateGroups(groups);
+  });
+
+  return previousGroups;
+}
+
 // ─── Inline create input ──────────────────────────────────────────────────────
 
 function InlineCreateInput({
@@ -176,7 +266,7 @@ function InlineCreateInput({
       {
         onSuccess: () => {
           toast.success("File created");
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
           onDone();
           navigate({
             to: "/admin/content/$roadmap/$track/$slug",
@@ -235,7 +325,7 @@ function InlineCreateRoadmap({ onDone }: { onDone: () => void }) {
       {
         onSuccess: () => {
           toast.success("Roadmap created");
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
           onDone();
         },
         onError: (err) => {
@@ -296,7 +386,7 @@ function InlineCreateTrack({
       {
         onSuccess: () => {
           toast.success("Sub-section created");
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
           onDone();
         },
         onError: (err) => {
@@ -558,7 +648,7 @@ function TrackFolder({
   const sortableFileChildren = fileChildren.filter((f) => f.slug !== "index");
   const fileIds = sortableFileChildren.map((f) => f.slug);
 
-  const handleFileDragEnd = (event: DragEndEvent) => {
+  const handleFileDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -573,13 +663,26 @@ function TrackFolder({
       topicOrder: i + 1,
     }));
 
+    const orderedSlugs = reordered.map((file) => file.slug);
+    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
+    const previousGroups = applyOptimisticContentListUpdate(queryClient, (groups) =>
+      updateRoadmapFiles(groups, roadmapName, (files) =>
+        reorderTrackFiles(files, item.track ?? item.name, orderedSlugs),
+      ),
+    );
+
     reorderMutation.mutate(
       { roadmap: roadmapName, items },
       {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+        onError: (err) => {
+          if (previousGroups) {
+            queryClient.setQueryData(contentListQueryKey, previousGroups);
+          }
+          toast.error(`Reorder failed: ${err.message}`);
         },
-        onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
+        },
       },
     );
   };
@@ -682,7 +785,7 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
   const fileIds = sortableFileChildren.map((f) => f.slug);
   const trackIds = trackChildren.map((t) => t.track ?? t.name);
 
-  const handleFileDragEnd = (event: DragEndEvent) => {
+  const handleFileDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -697,18 +800,31 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
       topicOrder: i + 1,
     }));
 
+    const orderedSlugs = reordered.map((file) => file.slug);
+    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
+    const previousGroups = applyOptimisticContentListUpdate(queryClient, (groups) =>
+      updateRoadmapFiles(groups, roadmapName, (files) =>
+        reorderRoadmapLevelFiles(files, orderedSlugs),
+      ),
+    );
+
     reorderMutation.mutate(
       { roadmap: roadmapName, items },
       {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+        onError: (err) => {
+          if (previousGroups) {
+            queryClient.setQueryData(contentListQueryKey, previousGroups);
+          }
+          toast.error(`Reorder failed: ${err.message}`);
         },
-        onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
+        },
       },
     );
   };
 
-  const handleTrackDragEnd = (event: DragEndEvent) => {
+  const handleTrackDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -727,13 +843,24 @@ function RoadmapFolder({ item }: { item: FolderNode }) {
       }));
     });
 
+    const orderedTracks = reordered.map((track) => track.track ?? track.name);
+    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
+    const previousGroups = applyOptimisticContentListUpdate(queryClient, (groups) =>
+      updateRoadmapFiles(groups, roadmapName, (files) => reorderTracks(files, orderedTracks)),
+    );
+
     reorderMutation.mutate(
       { roadmap: roadmapName, items },
       {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
+        onError: (err) => {
+          if (previousGroups) {
+            queryClient.setQueryData(contentListQueryKey, previousGroups);
+          }
+          toast.error(`Reorder failed: ${err.message}`);
         },
-        onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
+        },
       },
     );
   };

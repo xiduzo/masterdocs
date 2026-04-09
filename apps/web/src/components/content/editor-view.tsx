@@ -43,12 +43,12 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
     setInitializedFor(fileKey);
   }
 
-  const changeRecordId = data?.changeRecord?.id;
+  const prNumber = data?.changeRecord?.prNumber;
   const conflictQuery = useQuery({
     ...trpc.content.checkConflict.queryOptions({
-      changeRecordId: changeRecordId!,
+      prNumber: prNumber!,
     }),
-    enabled: !!changeRecordId,
+    enabled: !!prNumber,
   });
 
   const submitMutation = useMutation(trpc.content.submit.mutationOptions());
@@ -81,9 +81,9 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
   };
 
   const handlePublish = () => {
-    if (!changeRecordId) return;
+    if (!prNumber) return;
     publishMutation.mutate(
-      { changeRecordId },
+      { prNumber },
       {
         onSuccess: () => {
           toast.success("Published successfully");
@@ -95,9 +95,9 @@ export function ContentEditorView({ roadmap, slug, track, fromBranch }: ContentE
   };
 
   const handleDiscard = () => {
-    if (!changeRecordId) return;
+    if (!prNumber) return;
     discardMutation.mutate(
-      { changeRecordId },
+      { prNumber },
       {
         onSuccess: () => {
           toast.success("Changes discarded");

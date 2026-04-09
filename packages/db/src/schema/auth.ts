@@ -1,7 +1,6 @@
 import { relations } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 import { skillProgress } from "./skill-progress";
-import { changeRecords } from "./change-records";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -80,7 +79,6 @@ export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   skillProgress: many(skillProgress),
-  changeRecords: many(changeRecords),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

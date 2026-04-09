@@ -16,6 +16,13 @@ export interface ChangedFile {
   status: string;
 }
 
+export interface ContentPR {
+  prNumber: number;
+  branchName: string;
+  title: string;
+  baseSha: string;
+}
+
 export interface GitHubService {
   // Tree operations
   getDirectoryTree(path: string, branch?: string): Promise<TreeEntry[]>;
@@ -28,6 +35,7 @@ export interface GitHubService {
   getMainHeadSha(): Promise<string>;
   createBranch(name: string, sha: string): Promise<void>;
   deleteBranch(name: string): Promise<void>;
+  branchExists(name: string): Promise<boolean>;
 
   // Commit operations
   createOrUpdateFile(params: {
@@ -39,6 +47,9 @@ export interface GitHubService {
   }): Promise<{ sha: string }>;
 
   // PR operations
+  listContentPRs(): Promise<ContentPR[]>;
+  getPRByBranch(branchName: string): Promise<ContentPR | null>;
+  getPR(prNumber: number): Promise<ContentPR>;
   createPullRequest(params: {
     title: string;
     body: string;
@@ -151,9 +162,9 @@ export function createGitHubService(): GitHubService {
       }
 
       return data.map((item) => ({
-        path: item.path,
+        path: item.path ?? "",
         type: item.type === "dir" ? "dir" : "file",
-        sha: item.sha,
+        sha: item.sha ?? "",
       }));
     } catch (err) {
       return wrapOctokitError(err);
@@ -182,7 +193,7 @@ export function createGitHubService(): GitHubService {
         "base64",
       ).toString("utf-8");
 
-      return { content, sha: data.sha };
+      return { content, sha: data.sha ?? "" };
     } catch (err) {
       return wrapOctokitError(err);
     }
@@ -230,6 +241,21 @@ export function createGitHubService(): GitHubService {
     }
   }
 
+  async function branchExists(name: string): Promise<boolean> {
+    try {
+      await octokit.git.getRef({
+        owner,
+        repo,
+        ref: `heads/${name}`,
+      });
+      return true;
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 404) return false;
+      return wrapOctokitError(err);
+    }
+  }
+
   // -----------------------------------------------------------------------
   // Commit operations
   // -----------------------------------------------------------------------
@@ -260,6 +286,58 @@ export function createGitHubService(): GitHubService {
   // -----------------------------------------------------------------------
   // PR operations
   // -----------------------------------------------------------------------
+
+  function prFromData(pr: { number: number; head: { ref?: string | null }; title?: string | null; base: { sha?: string | null } }): ContentPR {
+    return {
+      prNumber: pr.number,
+      branchName: pr.head.ref ?? "",
+      title: pr.title ?? "",
+      baseSha: pr.base.sha ?? "",
+    };
+  }
+
+  async function listContentPRs(): Promise<ContentPR[]> {
+    try {
+      const { data } = await octokit.pulls.list({
+        owner,
+        repo,
+        state: "open",
+        per_page: 100,
+      });
+      return data
+        .filter((pr) => pr.head.ref.startsWith("content/"))
+        .map(prFromData);
+    } catch (err) {
+      return wrapOctokitError(err);
+    }
+  }
+
+  async function getPRByBranch(branchName: string): Promise<ContentPR | null> {
+    try {
+      const { data } = await octokit.pulls.list({
+        owner,
+        repo,
+        state: "open",
+        head: `${owner}:${branchName}`,
+      });
+      return data.length > 0 ? prFromData(data[0]!) : null;
+    } catch (err) {
+      return wrapOctokitError(err);
+    }
+  }
+
+  async function getPR(prNumber: number): Promise<ContentPR> {
+    try {
+      const { data } = await octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+      return prFromData(data);
+    } catch (err) {
+      return wrapOctokitError(err);
+    }
+  }
 
   async function createPullRequest(params: {
     title: string;
@@ -377,7 +455,11 @@ export function createGitHubService(): GitHubService {
     getMainHeadSha,
     createBranch,
     deleteBranch,
+    branchExists,
     createOrUpdateFile,
+    listContentPRs,
+    getPRByBranch,
+    getPR,
     createPullRequest,
     updatePullRequest,
     mergePullRequest,

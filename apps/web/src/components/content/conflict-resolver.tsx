@@ -12,7 +12,7 @@ import { Textarea } from "@masterdocs/ui/components/textarea";
 import { trpc } from "@/utils/trpc";
 
 interface ConflictResolverProps {
-  changeRecordId: string;
+  prNumber: number;
   mainBody: string;
   submittedBody: string;
   submittedFrontmatter?: MdxFrontmatter;
@@ -20,7 +20,7 @@ interface ConflictResolverProps {
 }
 
 export function ConflictResolver({
-  changeRecordId,
+  prNumber,
   mainBody,
   submittedBody,
   submittedFrontmatter,
@@ -35,7 +35,7 @@ export function ConflictResolver({
 
   const handleKeepMine = () => {
     resolveMutation.mutate(
-      { changeRecordId, strategy: "keep_mine" },
+      { prNumber, strategy: "keep_mine" },
       {
         onSuccess: () => {
           toast.success("Conflict resolved — kept your changes");
@@ -50,7 +50,7 @@ export function ConflictResolver({
 
   const handleUseMain = () => {
     resolveMutation.mutate(
-      { changeRecordId, strategy: "use_main" },
+      { prNumber, strategy: "use_main" },
       {
         onSuccess: () => {
           toast.success("Conflict resolved — reverted to published version");
@@ -70,7 +70,7 @@ export function ConflictResolver({
 
     resolveMutation.mutate(
       {
-        changeRecordId,
+        prNumber,
         strategy: "manual",
         manualContent: { frontmatter, body: manualBody },
       },

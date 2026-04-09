@@ -1,14 +1,21 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-
-import { db } from "@masterdocs/db";
-import { user } from "@masterdocs/db/schema/auth";
-import { changeRecords } from "@masterdocs/db/schema/change-records";
 
 import { protectedProcedure, router } from "../index";
 import { createGitHubService } from "../lib/github";
 import { type MdxFrontmatter, isValidSlug, parseMdx, serializeMdx } from "../lib/mdx";
+
+// Deterministic branch name derived from content coordinates.
+// filePath is fully recoverable from this, eliminating DB as source of truth.
+function contentBranchName(roadmap: string, slug: string, track?: string): string {
+  return track ? `content/${roadmap}/${track}/${slug}` : `content/${roadmap}/${slug}`;
+}
+
+// Reverse of contentBranchName → full GitHub file path.
+function filePathFromBranch(branchName: string): string {
+  const segments = branchName.slice("content/".length).split("/");
+  return `apps/fumadocs/content/docs/${segments.join("/")}.mdx`;
+}
 
 /**
  * Admin-only procedure — extends protectedProcedure with a role check.
@@ -68,28 +75,26 @@ export const contentRouter = router({
     const topLevel = await github.getDirectoryTree(contentBase);
     const roadmapDirs = topLevel.filter((e) => e.type === "dir");
 
-    // 2. Fetch all pending change_records in one query
-    const pendingRecords = await db
-      .select({ filePath: changeRecords.filePath, branchName: changeRecords.branchName })
-      .from(changeRecords)
-      .where(eq(changeRecords.status, "pending_review"));
-
-    const pendingMap = new Map(pendingRecords.map((r) => [r.filePath, r.branchName]));
+    // 2. Build pendingMap from open GitHub PRs — no DB needed
+    const openPRs = await github.listContentPRs();
+    const pendingMap = new Map(openPRs.map((pr) => [filePathFromBranch(pr.branchName), pr.branchName]));
     const roadmapDirNames = new Set(roadmapDirs.map((d) => d.path.split("/").pop()!));
 
     // Helper: parse file metadata from GitHub
     async function parseFile(filePath: string, trackSlug?: string) {
       const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
       let title = slug;
+      let resolvedFromPendingBranch = false;
       try {
         const branch = pendingMap.get(filePath);
         const { content } = await github.getFileContent(filePath, branch);
         const parsed = parseMdx(content);
         title = parsed.frontmatter.title || slug;
+        resolvedFromPendingBranch = !!branch;
       } catch {
         // fall back to slug as title
       }
-      const state = pendingMap.has(filePath)
+      const state = resolvedFromPendingBranch
         ? ("pending_review" as const)
         : ("published" as const);
       return { slug, title, path: filePath, state, track: trackSlug };
@@ -209,6 +214,7 @@ export const contentRouter = router({
       const parts = relative.split("/");
       if (parts.length < 2) continue;
       const dirName = parts[0];
+      if (!dirName) continue;
       if (roadmapDirNames.has(dirName)) continue;
       if (!pendingNewRoadmaps.has(dirName)) pendingNewRoadmaps.set(dirName, []);
       pendingNewRoadmaps.get(dirName)!.push({ filePath, branchName });
@@ -232,21 +238,14 @@ export const contentRouter = router({
   }),
 
   listPending: adminProcedure.query(async () => {
-    const records = await db
-      .select({
-        id: changeRecords.id,
-        filePath: changeRecords.filePath,
-        branchName: changeRecords.branchName,
-        prNumber: changeRecords.prNumber,
-        createdAt: changeRecords.createdAt,
-        submitterName: user.name,
-        submitterEmail: user.email,
-      })
-      .from(changeRecords)
-      .innerJoin(user, eq(changeRecords.userId, user.id))
-      .where(eq(changeRecords.status, "pending_review"));
-
-    return records;
+    const github = createGitHubService();
+    const prs = await github.listContentPRs();
+    return prs.map((pr) => ({
+      prNumber: pr.prNumber,
+      branchName: pr.branchName,
+      filePath: filePathFromBranch(pr.branchName),
+      title: pr.title,
+    }));
   }),
 
   get: adminProcedure
@@ -261,69 +260,70 @@ export const contentRouter = router({
     .query(async ({ input }) => {
       const github = createGitHubService();
       const filePath = contentFilePath(input.roadmap, input.slug, input.track);
+      const branchName = contentBranchName(input.roadmap, input.slug, input.track);
 
-      // Look up a pending change_record for this file path
-      const [pendingRecord] = await db
-        .select()
-        .from(changeRecords)
-        .where(
-          and(
-            eq(changeRecords.filePath, filePath),
-            eq(changeRecords.status, "pending_review"),
-          ),
-        )
-        .limit(1);
+      // Look up an open PR by the deterministic branch name — no DB needed
+      const pr = await github.getPRByBranch(branchName);
+      const branch = pr?.branchName;
 
-      // Always read from the feature branch when a pending record exists
-      const branch = pendingRecord ? pendingRecord.branchName : undefined;
+      let resolvedFromPendingBranch = false;
+      let content: string;
+      let sha: string;
 
       try {
-        const { content, sha } = await github.getFileContent(filePath, branch);
-        const { frontmatter, body } = parseMdx(content);
-
-        // Fetch the main branch body for diffing
-        let mainBody: string;
-        if (pendingRecord) {
-          try {
-            const { content: mainContent } = await github.getFileContent(filePath);
-            mainBody = parseMdx(mainContent).body;
-          } catch {
-            // File may not exist on main (new file) — that's fine
-            mainBody = "";
-          }
-        } else {
-          // No pending changes — content is already from main
-          mainBody = body;
-        }
-
-        const state = pendingRecord ? "pending_review" as const : "published" as const;
-
-        return {
-          frontmatter,
-          body,
-          state,
-          mainBody,
-          ...(pendingRecord
-            ? {
-                changeRecord: {
-                  id: pendingRecord.id,
-                  branchName: pendingRecord.branchName,
-                  prNumber: pendingRecord.prNumber,
-                  baseCommitSha: pendingRecord.baseCommitSha,
-                },
-              }
-            : {}),
-          fileSha: sha,
-        };
+        const file = await github.getFileContent(filePath, branch);
+        content = file.content;
+        sha = file.sha;
+        resolvedFromPendingBranch = !!branch;
       } catch (err) {
-        if (err instanceof Error && err.message.includes("not found")) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: `File not found: ${filePath}`,
-          });
+        if (!pr || !(err instanceof Error) || !err.message.includes("not found")) {
+          if (err instanceof Error && err.message.includes("not found")) {
+            throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${filePath}` });
+          }
+          throw err;
         }
-        throw err;
+        // PR exists but branch/file not found — fall back to main
+        const fallback = await github.getFileContent(filePath);
+        content = fallback.content;
+        sha = fallback.sha;
+        resolvedFromPendingBranch = false;
       }
+
+      const { frontmatter, body } = parseMdx(content);
+
+      // Fetch the main branch body for diffing when viewing a pending version
+      let mainBody: string;
+      if (pr && resolvedFromPendingBranch) {
+        try {
+          const { content: mainContent } = await github.getFileContent(filePath);
+          mainBody = parseMdx(mainContent).body;
+        } catch {
+          mainBody = "";
+        }
+      } else {
+        mainBody = body;
+      }
+
+      const state = resolvedFromPendingBranch
+        ? ("pending_review" as const)
+        : ("published" as const);
+
+      return {
+        frontmatter,
+        body,
+        state,
+        mainBody,
+        fileSha: sha,
+        ...(pr && resolvedFromPendingBranch
+          ? {
+              changeRecord: {
+                prNumber: pr.prNumber,
+                branchName: pr.branchName,
+                baseSha: pr.baseSha,
+              },
+            }
+          : {}),
+      };
     }),
 
   submit: adminProcedure
@@ -340,44 +340,36 @@ export const contentRouter = router({
         fileSha: z.string().optional(),
       }),
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       const github = createGitHubService();
 
       // 1. Serialize MDX from frontmatter + body
       const mdxContent = serializeMdx(input.frontmatter, input.body);
       const filePath = contentFilePath(input.roadmap, input.slug, input.track);
+      const branchName = contentBranchName(input.roadmap, input.slug, input.track);
 
-      // 2. Check for an existing pending change record
-      const [existingRecord] = await db
-        .select()
-        .from(changeRecords)
-        .where(
-          and(
-            eq(changeRecords.filePath, filePath),
-            eq(changeRecords.status, "pending_review"),
-          ),
-        )
-        .limit(1);
-
-      if (existingRecord) {
-        // Update the existing branch: fetch current file SHA from branch, then push new content
-        const { sha: currentFileSha } = await github.getFileContent(filePath, existingRecord.branchName);
+      // 2. Check for an existing open PR via GitHub — no DB needed
+      const existingPR = await github.getPRByBranch(branchName);
+      if (existingPR) {
+        const { sha: currentFileSha } = await github.getFileContent(filePath, branchName);
         await github.createOrUpdateFile({
           path: filePath,
           content: mdxContent,
           message: `Content update: ${input.frontmatter.title}`,
-          branch: existingRecord.branchName,
+          branch: branchName,
           sha: currentFileSha,
         });
         await github.updatePullRequest({
-          prNumber: existingRecord.prNumber,
+          prNumber: existingPR.prNumber,
           title: `Content update: ${input.frontmatter.title}`,
         });
-        return { prNumber: existingRecord.prNumber, branchName: existingRecord.branchName, isNew: false };
+        return { prNumber: existingPR.prNumber, branchName, isNew: false };
       }
 
-      // 3. No existing record — create new branch + PR
-      const branchName = `content/${input.slug}-${Date.now()}`;
+      // 3. No open PR — clean up stale branch if it exists, then create fresh
+      if (await github.branchExists(branchName)) {
+        await github.deleteBranch(branchName);
+      }
       const mainSha = await github.getMainHeadSha();
       await github.createBranch(branchName, mainSha);
       await github.createOrUpdateFile({
@@ -393,13 +385,6 @@ export const contentRouter = router({
         head: branchName,
         base: "main",
       });
-      await db.insert(changeRecords).values({
-        userId: ctx.session.user.id,
-        filePath,
-        branchName,
-        prNumber: pr.number,
-        baseCommitSha: mainSha,
-      });
       return { prNumber: pr.number, branchName, isNew: true };
     }),
 
@@ -411,13 +396,12 @@ export const contentRouter = router({
         track: z.string(),
       }),
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       // 1. Validate slug
       if (!isValidSlug(input.slug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message:
-            "Slug must contain only lowercase letters, numbers, and hyphens",
+          message: "Slug must contain only lowercase letters, numbers, and hyphens",
         });
       }
 
@@ -429,10 +413,7 @@ export const contentRouter = router({
       // 3. Check if file already exists on main
       try {
         await github.getFileContent(filePath);
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "File already exists",
-        });
+        throw new TRPCError({ code: "CONFLICT", message: "File already exists" });
       } catch (err) {
         if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
         if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
@@ -445,11 +426,12 @@ export const contentRouter = router({
           .replace(/\b\w/g, (c) => c.toUpperCase()),
       };
 
-      // 5. Serialize MDX with empty body
-      const mdxContent = serializeMdx(defaultFrontmatter, "");
-
-      // 6. Create branch, commit, and PR
-      const branchName = `content/${input.slug}-${Date.now()}`;
+      // 5. Use the deterministic branch name so submit/get can locate this PR later
+      const branchName = contentBranchName(input.roadmap, input.slug, input.track);
+      // Clean up any stale abandoned branch
+      if (await github.branchExists(branchName)) {
+        await github.deleteBranch(branchName);
+      }
       const mainSha = await github.getMainHeadSha();
       await github.createBranch(branchName, mainSha);
 
@@ -458,7 +440,7 @@ export const contentRouter = router({
 
       await github.createOrUpdateFile({
         path: filePath,
-        content: mdxContent,
+        content: serializeMdx(defaultFrontmatter, ""),
         message: `Create new content: ${defaultFrontmatter.title}`,
         branch: branchName,
       });
@@ -466,10 +448,7 @@ export const contentRouter = router({
       // Update the track's meta.json to include the new page
       const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/${input.track}/meta.json`;
       try {
-        const { content: metaRaw, sha: metaSha } = await github.getFileContent(
-          metaPath,
-          branchName,
-        );
+        const { content: metaRaw, sha: metaSha } = await github.getFileContent(metaPath, branchName);
         const meta = JSON.parse(metaRaw);
         if (Array.isArray(meta.pages) && !meta.pages.includes(input.slug)) {
           meta.pages.push(input.slug);
@@ -492,166 +471,60 @@ export const contentRouter = router({
         base: "main",
       });
 
-      await db.insert(changeRecords).values({
-        userId: ctx.session.user.id,
-        filePath,
-        branchName,
-        prNumber: pr.number,
-        baseCommitSha: mainSha,
-      });
-
       return { prNumber: pr.number, branchName };
     }),
 
   publish: adminProcedure
-    .input(
-      z.object({
-        changeRecordId: z.string(),
-      }),
-    )
+    .input(z.object({ prNumber: z.number() }))
     .mutation(async ({ input }) => {
-      // 1. Look up change_record by ID
-      const [record] = await db
-        .select()
-        .from(changeRecords)
-        .where(eq(changeRecords.id, input.changeRecordId))
-        .limit(1);
-
-      if (!record) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Change record not found",
-        });
-      }
-
-      // 2. Verify status is pending_review
-      if (record.status !== "pending_review") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Change record is not pending review",
-        });
-      }
-
       const github = createGitHubService();
+      const pr = await github.getPR(input.prNumber);
 
-      // 3. Try to merge PR using merge commit strategy
       try {
-        await github.mergePullRequest(record.prNumber, "merge");
+        await github.mergePullRequest(pr.prNumber, "merge");
       } catch (err) {
-        if (
-          err instanceof Error &&
-          err.message.toLowerCase().includes("conflict")
-        ) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Merge conflict detected",
-          });
+        if (err instanceof Error && err.message.toLowerCase().includes("conflict")) {
+          throw new TRPCError({ code: "CONFLICT", message: "Merge conflict detected" });
         }
         throw err;
       }
 
-      // 4. Update change_record status to published
-      await db
-        .update(changeRecords)
-        .set({ status: "published" })
-        .where(eq(changeRecords.id, input.changeRecordId));
-
-      // 5. Delete feature branch
-      await github.deleteBranch(record.branchName);
-
+      await github.deleteBranch(pr.branchName);
       return { success: true };
     }),
 
   discard: adminProcedure
-    .input(
-      z.object({
-        changeRecordId: z.string(),
-      }),
-    )
+    .input(z.object({ prNumber: z.number() }))
     .mutation(async ({ input }) => {
-      // 1. Look up change_record by ID
-      const [record] = await db
-        .select()
-        .from(changeRecords)
-        .where(eq(changeRecords.id, input.changeRecordId))
-        .limit(1);
-
-      if (!record) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Change record not found",
-        });
-      }
-
       const github = createGitHubService();
-
-      // 2. Close the PR
-      await github.closePullRequest(record.prNumber);
-
-      // 3. Delete the feature branch
-      await github.deleteBranch(record.branchName);
-
-      // 4. Delete the change_record from DB
-      await db
-        .delete(changeRecords)
-        .where(eq(changeRecords.id, input.changeRecordId));
-
+      const pr = await github.getPR(input.prNumber);
+      await github.closePullRequest(pr.prNumber);
+      await github.deleteBranch(pr.branchName);
       return { success: true };
     }),
 
   checkConflict: adminProcedure
-    .input(
-      z.object({
-        changeRecordId: z.string(),
-      }),
-    )
+    .input(z.object({ prNumber: z.number() }))
     .query(async ({ input }) => {
-      // 1. Look up change_record by ID
-      const [record] = await db
-        .select()
-        .from(changeRecords)
-        .where(eq(changeRecords.id, input.changeRecordId))
-        .limit(1);
-
-      if (!record) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Change record not found",
-        });
-      }
-
       const github = createGitHubService();
-
-      // 2. Get current main HEAD SHA
+      const pr = await github.getPR(input.prNumber);
       const mainSha = await github.getMainHeadSha();
 
-      // 3. If main HEAD === record.baseCommitSha, no conflict
-      if (mainSha === record.baseCommitSha) {
-        return {
-          hasConflict: false,
-          mainAdvanced: false,
-          currentMainSha: mainSha,
-        };
+      if (mainSha === pr.baseSha) {
+        return { hasConflict: false, mainAdvanced: false, currentMainSha: mainSha };
       }
 
-      // 4. Main has advanced — compare commits to see if the same file was modified
-      const comparison = await github.compareCommits(record.baseCommitSha, mainSha);
-      const fileWasModified = comparison.files.some(
-        (f) => f.filename === record.filePath,
-      );
+      const filePath = filePathFromBranch(pr.branchName);
+      const comparison = await github.compareCommits(pr.baseSha, mainSha);
+      const fileWasModified = comparison.files.some((f) => f.filename === filePath);
 
-      // 5. Return conflict status
-      return {
-        hasConflict: fileWasModified,
-        mainAdvanced: true,
-        currentMainSha: mainSha,
-      };
+      return { hasConflict: fileWasModified, mainAdvanced: true, currentMainSha: mainSha };
     }),
 
   resolveConflict: adminProcedure
     .input(
       z.object({
-        changeRecordId: z.string(),
+        prNumber: z.number(),
         strategy: z.enum(["keep_mine", "use_main", "manual"]),
         manualContent: z
           .object({
@@ -665,75 +538,43 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      // 1. Look up change_record by ID
-      const [record] = await db
-        .select()
-        .from(changeRecords)
-        .where(eq(changeRecords.id, input.changeRecordId))
-        .limit(1);
-
-      if (!record) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Change record not found",
-        });
-      }
-
       const github = createGitHubService();
+      const pr = await github.getPR(input.prNumber);
+      const filePath = filePathFromBranch(pr.branchName);
 
       switch (input.strategy) {
         case "keep_mine": {
-          // Read the file from the feature branch, then re-commit it
-          // to force the branch to be up-to-date
-          const { content, sha: fileSha } = await github.getFileContent(
-            record.filePath,
-            record.branchName,
-          );
+          const { content, sha: fileSha } = await github.getFileContent(filePath, pr.branchName);
           await github.createOrUpdateFile({
-            path: record.filePath,
+            path: filePath,
             content,
-            message: `Resolve conflict: keep my changes for ${record.filePath}`,
-            branch: record.branchName,
+            message: `Resolve conflict: keep my changes for ${filePath}`,
+            branch: pr.branchName,
             sha: fileSha,
           });
           return { success: true };
         }
 
         case "use_main": {
-          // Close PR, delete branch, delete change_record
-          await github.closePullRequest(record.prNumber);
-          await github.deleteBranch(record.branchName);
-          await db
-            .delete(changeRecords)
-            .where(eq(changeRecords.id, input.changeRecordId));
+          await github.closePullRequest(pr.prNumber);
+          await github.deleteBranch(pr.branchName);
           return { success: true };
         }
 
         case "manual": {
-          // Validate manualContent is provided
           if (!input.manualContent) {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: "Manual content is required for manual resolution strategy",
             });
           }
-
-          // Serialize MDX from manual content
-          const mdxContent = serializeMdx(
-            input.manualContent.frontmatter,
-            input.manualContent.body,
-          );
-
-          // Get the file SHA from the branch, then commit the manual content
-          const { sha: fileSha } = await github.getFileContent(
-            record.filePath,
-            record.branchName,
-          );
+          const mdxContent = serializeMdx(input.manualContent.frontmatter, input.manualContent.body);
+          const { sha: fileSha } = await github.getFileContent(filePath, pr.branchName);
           await github.createOrUpdateFile({
-            path: record.filePath,
+            path: filePath,
             content: mdxContent,
-            message: `Resolve conflict: manual edit for ${record.filePath}`,
-            branch: record.branchName,
+            message: `Resolve conflict: manual edit for ${filePath}`,
+            branch: pr.branchName,
             sha: fileSha,
           });
           return { success: true };
@@ -750,7 +591,7 @@ export const contentRouter = router({
         description: z.string().optional(),
       }),
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       if (!isValidSlug(input.slug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -863,7 +704,7 @@ export const contentRouter = router({
         trackTitle: z.string().min(1),
       }),
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       const trackSlug = input.trackSlug;
 
       if (!isValidSlug(trackSlug)) {
