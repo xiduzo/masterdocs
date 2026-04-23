@@ -16,9 +16,10 @@ interface ContentEditorProps {
 export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEditorProps) {
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery(
-    trpc.content.get.queryOptions({ roadmap, track, slug, fromBranch }),
-  );
+  const { data, isLoading, error } = useQuery({
+    ...trpc.content.get.queryOptions({ roadmap, track, slug, fromBranch }),
+    meta: { silentError: true },
+  });
 
   // Lazy initializer captures cached data on mount; effect handles async load.
   // The component is keyed per file at the route level, so these initialize fresh per file.

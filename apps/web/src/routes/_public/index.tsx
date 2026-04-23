@@ -64,7 +64,7 @@ function HomeComponent() {
                 <Skeleton className="h-10 w-full" />
               ) : session ? (
                 isAdmin ? (
-                  <Link to="/admin/content">
+                  <Link to="/admin/roadmaps">
                     <Button className="w-full">Open Editor</Button>
                   </Link>
                 ) : (

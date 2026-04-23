@@ -10,19 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PublicRouteImport } from './routes/_public'
+import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as PublicDashboardRouteImport } from './routes/_public/dashboard'
-import { Route as AdminRoadmapsRouteRouteImport } from './routes/admin/roadmaps/route'
-import { Route as AdminContentRouteRouteImport } from './routes/admin/content/route'
 import { Route as AdminRoadmapsIndexRouteImport } from './routes/admin/roadmaps/index'
-import { Route as AdminContentIndexRouteImport } from './routes/admin/content/index'
-import { Route as AdminRoadmapsRoadmapRouteImport } from './routes/admin/roadmaps/$roadmap'
-import { Route as AdminContentRoadmapSlugRouteImport } from './routes/admin/content/$roadmap.$slug'
-import { Route as AdminContentRoadmapTrackSlugRouteImport } from './routes/admin/content/$roadmap.$track.$slug'
+import { Route as AdminRoadmapsRoadmapIndexRouteImport } from './routes/admin/roadmaps/$roadmap/index'
+import { Route as AdminRoadmapsRoadmapTracksRouteRouteImport } from './routes/admin/roadmaps/$roadmap/tracks/route'
+import { Route as AdminRoadmapsRoadmapTracksIndexRouteImport } from './routes/admin/roadmaps/$roadmap/tracks/index'
+import { Route as AdminRoadmapsRoadmapTracksSlugRouteImport } from './routes/admin/roadmaps/$roadmap/tracks/$slug'
+import { Route as AdminRoadmapsRoadmapTracksTrackSlugRouteImport } from './routes/admin/roadmaps/$roadmap/tracks/$track/$slug'
 
 const PublicRoute = PublicRouteImport.update({
   id: '/_public',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRouteRoute = AdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PublicIndexRoute = PublicIndexRouteImport.update({
@@ -40,121 +45,121 @@ const PublicDashboardRoute = PublicDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => PublicRoute,
 } as any)
-const AdminRoadmapsRouteRoute = AdminRoadmapsRouteRouteImport.update({
-  id: '/admin/roadmaps',
-  path: '/admin/roadmaps',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminContentRouteRoute = AdminContentRouteRouteImport.update({
-  id: '/admin/content',
-  path: '/admin/content',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminRoadmapsIndexRoute = AdminRoadmapsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AdminRoadmapsRouteRoute,
+  id: '/roadmaps/',
+  path: '/roadmaps/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminContentIndexRoute = AdminContentIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AdminContentRouteRoute,
-} as any)
-const AdminRoadmapsRoadmapRoute = AdminRoadmapsRoadmapRouteImport.update({
-  id: '/$roadmap',
-  path: '/$roadmap',
-  getParentRoute: () => AdminRoadmapsRouteRoute,
-} as any)
-const AdminContentRoadmapSlugRoute = AdminContentRoadmapSlugRouteImport.update({
-  id: '/$roadmap/$slug',
-  path: '/$roadmap/$slug',
-  getParentRoute: () => AdminContentRouteRoute,
-} as any)
-const AdminContentRoadmapTrackSlugRoute =
-  AdminContentRoadmapTrackSlugRouteImport.update({
-    id: '/$roadmap/$track/$slug',
-    path: '/$roadmap/$track/$slug',
-    getParentRoute: () => AdminContentRouteRoute,
+const AdminRoadmapsRoadmapIndexRoute =
+  AdminRoadmapsRoadmapIndexRouteImport.update({
+    id: '/roadmaps/$roadmap/',
+    path: '/roadmaps/$roadmap/',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminRoadmapsRoadmapTracksRouteRoute =
+  AdminRoadmapsRoadmapTracksRouteRouteImport.update({
+    id: '/roadmaps/$roadmap/tracks',
+    path: '/roadmaps/$roadmap/tracks',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminRoadmapsRoadmapTracksIndexRoute =
+  AdminRoadmapsRoadmapTracksIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AdminRoadmapsRoadmapTracksRouteRoute,
+  } as any)
+const AdminRoadmapsRoadmapTracksSlugRoute =
+  AdminRoadmapsRoadmapTracksSlugRouteImport.update({
+    id: '/$slug',
+    path: '/$slug',
+    getParentRoute: () => AdminRoadmapsRoadmapTracksRouteRoute,
+  } as any)
+const AdminRoadmapsRoadmapTracksTrackSlugRoute =
+  AdminRoadmapsRoadmapTracksTrackSlugRouteImport.update({
+    id: '/$track/$slug',
+    path: '/$track/$slug',
+    getParentRoute: () => AdminRoadmapsRoadmapTracksRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/admin': typeof AdminRouteRouteWithChildren
   '/': typeof PublicIndexRoute
-  '/admin/content': typeof AdminContentRouteRouteWithChildren
-  '/admin/roadmaps': typeof AdminRoadmapsRouteRouteWithChildren
   '/dashboard': typeof PublicDashboardRoute
   '/login': typeof PublicLoginRoute
-  '/admin/roadmaps/$roadmap': typeof AdminRoadmapsRoadmapRoute
-  '/admin/content/': typeof AdminContentIndexRoute
   '/admin/roadmaps/': typeof AdminRoadmapsIndexRoute
-  '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
-  '/admin/content/$roadmap/$track/$slug': typeof AdminContentRoadmapTrackSlugRoute
+  '/admin/roadmaps/$roadmap/tracks': typeof AdminRoadmapsRoadmapTracksRouteRouteWithChildren
+  '/admin/roadmaps/$roadmap/': typeof AdminRoadmapsRoadmapIndexRoute
+  '/admin/roadmaps/$roadmap/tracks/$slug': typeof AdminRoadmapsRoadmapTracksSlugRoute
+  '/admin/roadmaps/$roadmap/tracks/': typeof AdminRoadmapsRoadmapTracksIndexRoute
+  '/admin/roadmaps/$roadmap/tracks/$track/$slug': typeof AdminRoadmapsRoadmapTracksTrackSlugRoute
 }
 export interface FileRoutesByTo {
+  '/admin': typeof AdminRouteRouteWithChildren
   '/dashboard': typeof PublicDashboardRoute
   '/login': typeof PublicLoginRoute
   '/': typeof PublicIndexRoute
-  '/admin/roadmaps/$roadmap': typeof AdminRoadmapsRoadmapRoute
-  '/admin/content': typeof AdminContentIndexRoute
   '/admin/roadmaps': typeof AdminRoadmapsIndexRoute
-  '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
-  '/admin/content/$roadmap/$track/$slug': typeof AdminContentRoadmapTrackSlugRoute
+  '/admin/roadmaps/$roadmap': typeof AdminRoadmapsRoadmapIndexRoute
+  '/admin/roadmaps/$roadmap/tracks/$slug': typeof AdminRoadmapsRoadmapTracksSlugRoute
+  '/admin/roadmaps/$roadmap/tracks': typeof AdminRoadmapsRoadmapTracksIndexRoute
+  '/admin/roadmaps/$roadmap/tracks/$track/$slug': typeof AdminRoadmapsRoadmapTracksTrackSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/admin': typeof AdminRouteRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
-  '/admin/content': typeof AdminContentRouteRouteWithChildren
-  '/admin/roadmaps': typeof AdminRoadmapsRouteRouteWithChildren
   '/_public/dashboard': typeof PublicDashboardRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/': typeof PublicIndexRoute
-  '/admin/roadmaps/$roadmap': typeof AdminRoadmapsRoadmapRoute
-  '/admin/content/': typeof AdminContentIndexRoute
   '/admin/roadmaps/': typeof AdminRoadmapsIndexRoute
-  '/admin/content/$roadmap/$slug': typeof AdminContentRoadmapSlugRoute
-  '/admin/content/$roadmap/$track/$slug': typeof AdminContentRoadmapTrackSlugRoute
+  '/admin/roadmaps/$roadmap/tracks': typeof AdminRoadmapsRoadmapTracksRouteRouteWithChildren
+  '/admin/roadmaps/$roadmap/': typeof AdminRoadmapsRoadmapIndexRoute
+  '/admin/roadmaps/$roadmap/tracks/$slug': typeof AdminRoadmapsRoadmapTracksSlugRoute
+  '/admin/roadmaps/$roadmap/tracks/': typeof AdminRoadmapsRoadmapTracksIndexRoute
+  '/admin/roadmaps/$roadmap/tracks/$track/$slug': typeof AdminRoadmapsRoadmapTracksTrackSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/admin'
     | '/'
-    | '/admin/content'
-    | '/admin/roadmaps'
     | '/dashboard'
     | '/login'
-    | '/admin/roadmaps/$roadmap'
-    | '/admin/content/'
     | '/admin/roadmaps/'
-    | '/admin/content/$roadmap/$slug'
-    | '/admin/content/$roadmap/$track/$slug'
+    | '/admin/roadmaps/$roadmap/tracks'
+    | '/admin/roadmaps/$roadmap/'
+    | '/admin/roadmaps/$roadmap/tracks/$slug'
+    | '/admin/roadmaps/$roadmap/tracks/'
+    | '/admin/roadmaps/$roadmap/tracks/$track/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/admin'
     | '/dashboard'
     | '/login'
     | '/'
-    | '/admin/roadmaps/$roadmap'
-    | '/admin/content'
     | '/admin/roadmaps'
-    | '/admin/content/$roadmap/$slug'
-    | '/admin/content/$roadmap/$track/$slug'
+    | '/admin/roadmaps/$roadmap'
+    | '/admin/roadmaps/$roadmap/tracks/$slug'
+    | '/admin/roadmaps/$roadmap/tracks'
+    | '/admin/roadmaps/$roadmap/tracks/$track/$slug'
   id:
     | '__root__'
+    | '/admin'
     | '/_public'
-    | '/admin/content'
-    | '/admin/roadmaps'
     | '/_public/dashboard'
     | '/_public/login'
     | '/_public/'
-    | '/admin/roadmaps/$roadmap'
-    | '/admin/content/'
     | '/admin/roadmaps/'
-    | '/admin/content/$roadmap/$slug'
-    | '/admin/content/$roadmap/$track/$slug'
+    | '/admin/roadmaps/$roadmap/tracks'
+    | '/admin/roadmaps/$roadmap/'
+    | '/admin/roadmaps/$roadmap/tracks/$slug'
+    | '/admin/roadmaps/$roadmap/tracks/'
+    | '/admin/roadmaps/$roadmap/tracks/$track/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
-  AdminContentRouteRoute: typeof AdminContentRouteRouteWithChildren
-  AdminRoadmapsRouteRoute: typeof AdminRoadmapsRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -164,6 +169,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof PublicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_public/': {
@@ -187,57 +199,86 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicDashboardRouteImport
       parentRoute: typeof PublicRoute
     }
-    '/admin/roadmaps': {
-      id: '/admin/roadmaps'
-      path: '/admin/roadmaps'
-      fullPath: '/admin/roadmaps'
-      preLoaderRoute: typeof AdminRoadmapsRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/content': {
-      id: '/admin/content'
-      path: '/admin/content'
-      fullPath: '/admin/content'
-      preLoaderRoute: typeof AdminContentRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin/roadmaps/': {
       id: '/admin/roadmaps/'
-      path: '/'
+      path: '/roadmaps'
       fullPath: '/admin/roadmaps/'
       preLoaderRoute: typeof AdminRoadmapsIndexRouteImport
-      parentRoute: typeof AdminRoadmapsRouteRoute
+      parentRoute: typeof AdminRouteRoute
     }
-    '/admin/content/': {
-      id: '/admin/content/'
+    '/admin/roadmaps/$roadmap/': {
+      id: '/admin/roadmaps/$roadmap/'
+      path: '/roadmaps/$roadmap'
+      fullPath: '/admin/roadmaps/$roadmap/'
+      preLoaderRoute: typeof AdminRoadmapsRoadmapIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/roadmaps/$roadmap/tracks': {
+      id: '/admin/roadmaps/$roadmap/tracks'
+      path: '/roadmaps/$roadmap/tracks'
+      fullPath: '/admin/roadmaps/$roadmap/tracks'
+      preLoaderRoute: typeof AdminRoadmapsRoadmapTracksRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/roadmaps/$roadmap/tracks/': {
+      id: '/admin/roadmaps/$roadmap/tracks/'
       path: '/'
-      fullPath: '/admin/content/'
-      preLoaderRoute: typeof AdminContentIndexRouteImport
-      parentRoute: typeof AdminContentRouteRoute
+      fullPath: '/admin/roadmaps/$roadmap/tracks/'
+      preLoaderRoute: typeof AdminRoadmapsRoadmapTracksIndexRouteImport
+      parentRoute: typeof AdminRoadmapsRoadmapTracksRouteRoute
     }
-    '/admin/roadmaps/$roadmap': {
-      id: '/admin/roadmaps/$roadmap'
-      path: '/$roadmap'
-      fullPath: '/admin/roadmaps/$roadmap'
-      preLoaderRoute: typeof AdminRoadmapsRoadmapRouteImport
-      parentRoute: typeof AdminRoadmapsRouteRoute
+    '/admin/roadmaps/$roadmap/tracks/$slug': {
+      id: '/admin/roadmaps/$roadmap/tracks/$slug'
+      path: '/$slug'
+      fullPath: '/admin/roadmaps/$roadmap/tracks/$slug'
+      preLoaderRoute: typeof AdminRoadmapsRoadmapTracksSlugRouteImport
+      parentRoute: typeof AdminRoadmapsRoadmapTracksRouteRoute
     }
-    '/admin/content/$roadmap/$slug': {
-      id: '/admin/content/$roadmap/$slug'
-      path: '/$roadmap/$slug'
-      fullPath: '/admin/content/$roadmap/$slug'
-      preLoaderRoute: typeof AdminContentRoadmapSlugRouteImport
-      parentRoute: typeof AdminContentRouteRoute
-    }
-    '/admin/content/$roadmap/$track/$slug': {
-      id: '/admin/content/$roadmap/$track/$slug'
-      path: '/$roadmap/$track/$slug'
-      fullPath: '/admin/content/$roadmap/$track/$slug'
-      preLoaderRoute: typeof AdminContentRoadmapTrackSlugRouteImport
-      parentRoute: typeof AdminContentRouteRoute
+    '/admin/roadmaps/$roadmap/tracks/$track/$slug': {
+      id: '/admin/roadmaps/$roadmap/tracks/$track/$slug'
+      path: '/$track/$slug'
+      fullPath: '/admin/roadmaps/$roadmap/tracks/$track/$slug'
+      preLoaderRoute: typeof AdminRoadmapsRoadmapTracksTrackSlugRouteImport
+      parentRoute: typeof AdminRoadmapsRoadmapTracksRouteRoute
     }
   }
 }
+
+interface AdminRoadmapsRoadmapTracksRouteRouteChildren {
+  AdminRoadmapsRoadmapTracksSlugRoute: typeof AdminRoadmapsRoadmapTracksSlugRoute
+  AdminRoadmapsRoadmapTracksIndexRoute: typeof AdminRoadmapsRoadmapTracksIndexRoute
+  AdminRoadmapsRoadmapTracksTrackSlugRoute: typeof AdminRoadmapsRoadmapTracksTrackSlugRoute
+}
+
+const AdminRoadmapsRoadmapTracksRouteRouteChildren: AdminRoadmapsRoadmapTracksRouteRouteChildren =
+  {
+    AdminRoadmapsRoadmapTracksSlugRoute: AdminRoadmapsRoadmapTracksSlugRoute,
+    AdminRoadmapsRoadmapTracksIndexRoute: AdminRoadmapsRoadmapTracksIndexRoute,
+    AdminRoadmapsRoadmapTracksTrackSlugRoute:
+      AdminRoadmapsRoadmapTracksTrackSlugRoute,
+  }
+
+const AdminRoadmapsRoadmapTracksRouteRouteWithChildren =
+  AdminRoadmapsRoadmapTracksRouteRoute._addFileChildren(
+    AdminRoadmapsRoadmapTracksRouteRouteChildren,
+  )
+
+interface AdminRouteRouteChildren {
+  AdminRoadmapsIndexRoute: typeof AdminRoadmapsIndexRoute
+  AdminRoadmapsRoadmapTracksRouteRoute: typeof AdminRoadmapsRoadmapTracksRouteRouteWithChildren
+  AdminRoadmapsRoadmapIndexRoute: typeof AdminRoadmapsRoadmapIndexRoute
+}
+
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminRoadmapsIndexRoute: AdminRoadmapsIndexRoute,
+  AdminRoadmapsRoadmapTracksRouteRoute:
+    AdminRoadmapsRoadmapTracksRouteRouteWithChildren,
+  AdminRoadmapsRoadmapIndexRoute: AdminRoadmapsRoadmapIndexRoute,
+}
+
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
 
 interface PublicRouteChildren {
   PublicDashboardRoute: typeof PublicDashboardRoute
@@ -254,38 +295,9 @@ const PublicRouteChildren: PublicRouteChildren = {
 const PublicRouteWithChildren =
   PublicRoute._addFileChildren(PublicRouteChildren)
 
-interface AdminContentRouteRouteChildren {
-  AdminContentIndexRoute: typeof AdminContentIndexRoute
-  AdminContentRoadmapSlugRoute: typeof AdminContentRoadmapSlugRoute
-  AdminContentRoadmapTrackSlugRoute: typeof AdminContentRoadmapTrackSlugRoute
-}
-
-const AdminContentRouteRouteChildren: AdminContentRouteRouteChildren = {
-  AdminContentIndexRoute: AdminContentIndexRoute,
-  AdminContentRoadmapSlugRoute: AdminContentRoadmapSlugRoute,
-  AdminContentRoadmapTrackSlugRoute: AdminContentRoadmapTrackSlugRoute,
-}
-
-const AdminContentRouteRouteWithChildren =
-  AdminContentRouteRoute._addFileChildren(AdminContentRouteRouteChildren)
-
-interface AdminRoadmapsRouteRouteChildren {
-  AdminRoadmapsRoadmapRoute: typeof AdminRoadmapsRoadmapRoute
-  AdminRoadmapsIndexRoute: typeof AdminRoadmapsIndexRoute
-}
-
-const AdminRoadmapsRouteRouteChildren: AdminRoadmapsRouteRouteChildren = {
-  AdminRoadmapsRoadmapRoute: AdminRoadmapsRoadmapRoute,
-  AdminRoadmapsIndexRoute: AdminRoadmapsIndexRoute,
-}
-
-const AdminRoadmapsRouteRouteWithChildren =
-  AdminRoadmapsRouteRoute._addFileChildren(AdminRoadmapsRouteRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
+  AdminRouteRoute: AdminRouteRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
-  AdminContentRouteRoute: AdminContentRouteRouteWithChildren,
-  AdminRoadmapsRouteRoute: AdminRoadmapsRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

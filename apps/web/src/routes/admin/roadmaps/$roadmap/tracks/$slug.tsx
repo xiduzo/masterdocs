@@ -7,7 +7,7 @@ const searchSchema = z.object({
   fromBranch: z.boolean().optional(),
 });
 
-export const Route = createFileRoute("/admin/content/$roadmap/$slug")({
+export const Route = createFileRoute("/admin/roadmaps/$roadmap/tracks/$slug")({
   component: ContentEditor,
   validateSearch: searchSchema,
 });
@@ -18,4 +18,3 @@ function ContentEditor() {
   const fileKey = `${roadmap}/${slug}`;
   return <ContentEditorView key={fileKey} roadmap={roadmap} slug={slug} fromBranch={fromBranch} />;
 }
-

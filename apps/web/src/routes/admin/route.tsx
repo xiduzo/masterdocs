@@ -1,9 +1,10 @@
-import type React from "react";
+import React from "react";
 import {
   Link,
   Outlet,
   createFileRoute,
   redirect,
+  useMatches,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
@@ -11,17 +12,14 @@ import { authClient } from "@/lib/auth-client";
 import { cn } from "@masterdocs/ui/lib/utils";
 import {
   BookOpen,
-  FileText,
+  ChevronRight,
   HelpCircle,
-  LayoutDashboard,
   LogOut,
   Map,
-  Settings,
-  Users,
 } from "lucide-react";
 
-export const Route = createFileRoute("/admin/roadmaps")({
-  component: RoadmapsLayout,
+export const Route = createFileRoute("/admin")({
+  component: AdminLayout,
   beforeLoad: async () => {
     const session = await authClient.getSession();
     if (!session.data) redirect({ to: "/login", throw: true });
@@ -30,12 +28,83 @@ export const Route = createFileRoute("/admin/roadmaps")({
   },
 });
 
-function RoadmapsLayout() {
+function slugToTitle(slug: string) {
+  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+interface Crumb {
+  label: string;
+  href?: string;
+}
+
+function useBreadcrumbs(): Crumb[] {
+  const matches = useMatches();
+  const crumbs: Crumb[] = [];
+
+  for (const match of matches) {
+    const id = match.routeId as string;
+    const params = match.params as Record<string, string>;
+
+    if (id === "/admin/roadmaps/") {
+      crumbs.push({ label: "Roadmaps", href: "/admin/roadmaps" });
+    } else if (id === "/admin/roadmaps/$roadmap/") {
+      crumbs.push({ label: slugToTitle(params.roadmap), href: `/admin/roadmaps/${params.roadmap}/` });
+    } else if (id === "/admin/roadmaps/$roadmap/tracks/$slug") {
+      crumbs.push({ label: slugToTitle(params.slug) });
+    } else if (id === "/admin/roadmaps/$roadmap/tracks/$track/$slug") {
+      crumbs.push({ label: slugToTitle(params.track) });
+      crumbs.push({ label: slugToTitle(params.slug) });
+    }
+  }
+
+  if (crumbs.length > 0) {
+    delete crumbs[crumbs.length - 1].href;
+  }
+
+  return crumbs;
+}
+
+function AdminToolbar() {
+  const crumbs = useBreadcrumbs();
+
+  return (
+    <header className="flex shrink-0 items-center justify-between border-b bg-background px-6 py-3.5">
+      <nav className="flex items-center gap-1.5 text-sm">
+        {crumbs.map((crumb, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && (
+              <ChevronRight className="size-3 text-muted-foreground/40" />
+            )}
+            {crumb.href ? (
+              <Link
+                to={crumb.href as "/admin/roadmaps"}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {crumb.label}
+              </Link>
+            ) : (
+              <span className="font-medium text-foreground">{crumb.label}</span>
+            )}
+          </React.Fragment>
+        ))}
+      </nav>
+
+      <div className="size-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+        A
+      </div>
+    </header>
+  );
+}
+
+function AdminLayout() {
   return (
     <div className="flex h-full overflow-hidden">
       <AdminSidebar />
-      <div className="flex-1 min-w-0 overflow-auto bg-background">
-        <Outlet />
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-background">
+        <AdminToolbar />
+        <div className="flex-1 min-h-0 overflow-auto">
+          <Outlet />
+        </div>
       </div>
     </div>
   );
@@ -51,36 +120,10 @@ const NAV_ITEMS: Array<{
   disabled?: boolean;
 }> = [
   {
-    icon: LayoutDashboard,
-    label: "Dashboard",
-    to: "/admin/roadmaps",
-    matchPrefix: "__never__",
-  },
-  {
     icon: Map,
     label: "Roadmaps",
     to: "/admin/roadmaps",
     matchPrefix: "/admin/roadmaps",
-  },
-  {
-    icon: FileText,
-    label: "Content",
-    to: "/admin/content",
-    matchPrefix: "/admin/content",
-  },
-  {
-    icon: Users,
-    label: "Users",
-    to: "/admin/roadmaps",
-    matchPrefix: "__never__",
-    disabled: true,
-  },
-  {
-    icon: Settings,
-    label: "Settings",
-    to: "/admin/roadmaps",
-    matchPrefix: "__never__",
-    disabled: true,
   },
 ];
 
@@ -107,10 +150,10 @@ function AdminSidebar() {
         </div>
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-white leading-none">
-            Admin Console
+            Masterdocs
           </p>
           <p className="text-[9px] text-white/30 mt-1 leading-none">
-            Corporate Modernism
+            Admin Console
           </p>
         </div>
       </div>
@@ -167,7 +210,7 @@ function NavItem({
 
   return (
     <Link
-      to={to as "/admin/roadmaps" | "/admin/content"}
+      to={to as "/admin/roadmaps"}
       className={cn(
         "flex items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium transition-colors",
         isActive

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@masterdocs/ui/components/badge";
 import { Button } from "@masterdocs/ui/components/button";
@@ -58,6 +58,7 @@ function RoadmapsDashboard() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
   const deleteRoadmapMutation = useMutation(trpc.content.deleteRoadmap.mutationOptions());
@@ -142,47 +143,36 @@ function RoadmapsDashboard() {
 
   return (
     <div className="flex flex-col min-h-full">
-      {/* Top header bar */}
-      <header className="flex items-center justify-between border-b px-6 py-3.5 bg-background sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold">Roadmap Architect</h1>
-          <span className="text-muted-foreground/40 text-sm">/</span>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-            <input
-              type="text"
-              placeholder="Search roadmaps..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="h-8 w-52 rounded-md border bg-muted/40 pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="size-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-            A
-          </div>
-        </div>
-      </header>
-
       <div className="flex-1 px-6 py-6 space-y-6">
-        {/* Page title + CTA */}
-        <div className="flex items-start justify-between">
+        {/* Page title + search + CTA */}
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold">Curriculum Roadmaps</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               Manage and organize educational tracks for institutional learning paths.
             </p>
           </div>
-          <Link to="/admin/roadmaps">
-            <Button className="gap-2">
-              <Plus className="size-4" />
-              Create New Roadmap
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+              <input
+                type="text"
+                placeholder="Search roadmaps..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="h-8 w-48 rounded-md border bg-muted/40 pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <Link to="/admin/roadmaps">
+              <Button className="gap-2">
+                <Plus className="size-4" />
+                Create New Roadmap
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Stats cards */}
@@ -203,8 +193,8 @@ function RoadmapsDashboard() {
           />
           <StatsCard
             icon={FileText}
-            iconClass="text-muted-foreground bg-muted"
-            label="Draft Mode"
+            iconClass="text-amber-600 bg-amber-500/10"
+            label="Pending Review"
             value={stats.draft}
             loading={isLoading}
           />
@@ -288,7 +278,8 @@ function RoadmapsDashboard() {
                     return (
                       <tr
                         key={row.slug}
-                        className="border-b last:border-0 hover:bg-muted/30 transition-colors group"
+                        className="border-b last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer"
+                        onClick={() => navigate({ to: "/admin/roadmaps/$roadmap/", params: { roadmap: row.slug } })}
                       >
                         <td className="px-5 py-3.5">
                           <div
@@ -332,9 +323,12 @@ function RoadmapsDashboard() {
                           <StatusBadge status={row.status} />
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div
+                            className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <Link
-                              to="/admin/roadmaps/$roadmap"
+                              to="/admin/roadmaps/$roadmap/"
                               params={{ roadmap: row.slug }}
                             >
                               <button
@@ -533,8 +527,8 @@ function StatusBadge({ status }: { status: string }) {
     );
   }
   return (
-    <Badge variant="outline" className="text-muted-foreground text-xs font-medium">
-      Draft
+    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500/10 font-medium text-xs">
+      Pending Review
     </Badge>
   );
 }

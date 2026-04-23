@@ -60,7 +60,7 @@ export function NewFileDialog({
           reset();
           onOpenChange(false);
           navigate({
-            to: "/admin/content/$roadmap/$slug",
+            to: "/admin/roadmaps/$roadmap/tracks/$slug",
             params: { roadmap: targetRoadmap, slug: targetSlug },
           });
         },

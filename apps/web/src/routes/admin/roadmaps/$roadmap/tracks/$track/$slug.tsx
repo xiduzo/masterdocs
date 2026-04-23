@@ -7,7 +7,7 @@ const searchSchema = z.object({
   fromBranch: z.boolean().optional(),
 });
 
-export const Route = createFileRoute("/admin/content/$roadmap/$track/$slug")({
+export const Route = createFileRoute("/admin/roadmaps/$roadmap/tracks/$track/$slug")({
   component: ContentEditor,
   validateSearch: searchSchema,
 });
