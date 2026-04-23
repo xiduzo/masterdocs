@@ -2,8 +2,8 @@
   "title": "Arduino Fundamentals",
   "pages": [
     "index",
-    "circuits-and-prototyping",
     "getting-started",
+    "circuits-and-prototyping",
     "programming-essentials"
   ]
 }
