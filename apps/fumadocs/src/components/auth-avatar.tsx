@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronUp, LogIn, LogOut, User } from "lucide-react";
+import { LogIn, LogOut, User } from "lucide-react";
 import { useSession, signOut } from "@/lib/auth-client";
 
 function getInitials(name?: string | null, email?: string | null): string {
@@ -15,7 +15,7 @@ function getInitials(name?: string | null, email?: string | null): string {
   return email ? email[0].toUpperCase() : "?";
 }
 
-export function AuthButton() {
+export function AuthAvatar() {
   const { data: session, isPending } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -36,25 +36,18 @@ export function AuthButton() {
   }, [open]);
 
   if (isPending) {
-    return (
-      <div className="order-first mb-2 pb-2 border-b border-fd-border flex items-center gap-2">
-        <div className="size-6 animate-pulse rounded-full bg-fd-muted shrink-0" />
-        <div className="h-3 w-24 animate-pulse rounded bg-fd-muted" />
-      </div>
-    );
+    return <div className="size-7 animate-pulse rounded-full bg-fd-muted" />;
   }
 
   if (!session?.user) {
     return (
-      <div className="order-first mb-2 pb-2 border-b border-fd-border">
-        <Link
-          href="/sign-in"
-          className="flex items-center gap-2 rounded-md px-1 py-1 text-xs text-fd-muted-foreground transition-colors hover:text-fd-foreground"
-        >
-          <LogIn className="size-3.5" />
-          Sign In
-        </Link>
-      </div>
+      <Link
+        href="/sign-in"
+        className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
+      >
+        <LogIn className="size-3.5" />
+        Sign In
+      </Link>
     );
   }
 
@@ -62,19 +55,28 @@ export function AuthButton() {
   const label = session.user.name || session.user.email;
 
   return (
-    <div ref={ref} className="order-first relative mb-2 pb-2 border-b border-fd-border">
-      {/* Popover */}
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Account menu"
+        className="flex size-7 items-center justify-center rounded-full bg-fd-primary/10 text-[11px] font-semibold text-fd-primary ring-1 ring-fd-primary/20 transition-opacity hover:opacity-80"
+      >
+        {initials}
+      </button>
+
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 overflow-hidden rounded-lg border border-fd-border bg-fd-background shadow-lg">
-          {/* Identity row */}
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-lg border border-fd-border bg-fd-background shadow-lg">
+          {/* Identity */}
           <div className="flex items-center gap-2.5 border-b border-fd-border px-3 py-2.5">
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fd-primary/10 text-[10px] font-semibold text-fd-primary">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-fd-primary/10 text-[11px] font-semibold text-fd-primary">
               {initials}
             </div>
-            <span className="min-w-0 truncate text-xs font-medium text-fd-foreground">
+            <span className="min-w-0 truncate text-xs text-fd-foreground">
               {label}
             </span>
           </div>
+
           {/* Actions */}
           <div className="p-1">
             <Link
@@ -96,21 +98,6 @@ export function AuthButton() {
           </div>
         </div>
       )}
-
-      {/* Trigger */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-xs text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
-      >
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fd-primary/10 text-[10px] font-semibold text-fd-primary">
-          {initials}
-        </div>
-        <span className="min-w-0 truncate">{label}</span>
-        <ChevronUp
-          className={`ml-auto size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
     </div>
   );
 }
