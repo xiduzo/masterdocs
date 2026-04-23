@@ -2,10 +2,10 @@
   "title": "Figma",
   "pages": [
     "index",
-    "getting-started",
     "figma-fundamentals",
     "components-and-design-systems",
     "development-and-ai",
-    "alternatives"
+    "alternatives",
+    "getting-started"
   ]
 }

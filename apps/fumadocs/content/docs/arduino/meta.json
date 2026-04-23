@@ -2,8 +2,8 @@
   "title": "Arduino",
   "pages": [
     "index",
-    "arduino-fundamentals",
     "hardware-components",
+    "arduino-fundamentals",
     "connectivity-and-iot",
     "creative-integrations"
   ]
