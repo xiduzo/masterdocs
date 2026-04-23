@@ -2,7 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { protectedProcedure, router } from "../index";
-import { createGitHubService } from "../lib/github";
+import type { GitHubService } from "../lib/github";
+import { getCachedGitHubService } from "../lib/github-cache";
 import { type MdxFrontmatter, isValidSlug, parseMdx, serializeMdx } from "../lib/mdx";
 
 // Deterministic branch name derived from content coordinates.
@@ -36,7 +37,7 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
  * Creates one if missing. Returns true if the file was created.
  */
 async function ensureRoadmapIndex(
-  github: ReturnType<typeof createGitHubService>,
+  github: GitHubService,
   roadmapSlug: string,
   title: string,
   branch: string,
@@ -80,7 +81,7 @@ function removePageFromMeta(rawMeta: string, page: string): string | null {
 }
 
 async function listFilesRecursively(
-  github: ReturnType<typeof createGitHubService>,
+  github: GitHubService,
   dirPath: string,
   branch = "main",
 ): Promise<string[]> {
@@ -106,7 +107,7 @@ async function listFilesRecursively(
 
 export const contentRouter = router({
   list: adminProcedure.query(async () => {
-    const github = createGitHubService();
+    const github = getCachedGitHubService();
     const contentBase = "apps/fumadocs/content/docs";
 
     // 1. Get top-level entries (roadmap directories)
@@ -276,7 +277,7 @@ export const contentRouter = router({
   }),
 
   listPending: adminProcedure.query(async () => {
-    const github = createGitHubService();
+    const github = getCachedGitHubService();
     const prs = await github.listContentPRs();
     return prs.map((pr) => ({
       prNumber: pr.prNumber,
@@ -296,7 +297,7 @@ export const contentRouter = router({
       }),
     )
     .query(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const filePath = contentFilePath(input.roadmap, input.slug, input.track);
       const branchName = contentBranchName(input.roadmap, input.slug, input.track);
 
@@ -379,7 +380,7 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
 
       // 1. Serialize MDX from frontmatter + body
       const mdxContent = serializeMdx(input.frontmatter, input.body);
@@ -443,7 +444,7 @@ export const contentRouter = router({
         });
       }
 
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
 
       // 2. Build file path (nested under track directory)
       const filePath = contentFilePath(input.roadmap, input.slug, input.track);
@@ -515,7 +516,7 @@ export const contentRouter = router({
   publish: adminProcedure
     .input(z.object({ prNumber: z.number() }))
     .mutation(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const pr = await github.getPR(input.prNumber);
 
       try {
@@ -527,6 +528,13 @@ export const contentRouter = router({
         throw err;
       }
 
+      // The merged file now exists on main — evict stale main-branch reads
+      // for that file and the directory listing that contained it.
+      const mergedFilePath = filePathFromBranch(pr.branchName);
+      github.invalidate.file(mergedFilePath, "main");
+      const mergedParent = mergedFilePath.slice(0, mergedFilePath.lastIndexOf("/"));
+      github.invalidate.tree(mergedParent, "main");
+
       await github.deleteBranch(pr.branchName);
       return { success: true };
     }),
@@ -534,7 +542,7 @@ export const contentRouter = router({
   discard: adminProcedure
     .input(z.object({ prNumber: z.number() }))
     .mutation(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const pr = await github.getPR(input.prNumber);
       await github.closePullRequest(pr.prNumber);
       await github.deleteBranch(pr.branchName);
@@ -544,7 +552,7 @@ export const contentRouter = router({
   checkConflict: adminProcedure
     .input(z.object({ prNumber: z.number() }))
     .query(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const pr = await github.getPR(input.prNumber);
       const mainSha = await github.getMainHeadSha();
 
@@ -576,7 +584,7 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const pr = await github.getPR(input.prNumber);
       const filePath = filePathFromBranch(pr.branchName);
 
@@ -637,7 +645,7 @@ export const contentRouter = router({
         });
       }
 
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const contentBase = "apps/fumadocs/content/docs";
 
       // Check if the roadmap directory already exists
@@ -726,6 +734,15 @@ export const contentRouter = router({
       try {
         await github.mergePullRequest(pr.number, "merge");
         await github.deleteBranch(branchName);
+        // Auto-merge landed a new roadmap directory on main — evict any stale
+        // reads that predate it.
+        github.invalidate.prefix(`${contentBase}/${input.slug}`, "main");
+        github.invalidate.file(`${contentBase}/meta.json`, "main");
+        github.invalidate.file(
+          `apps/fumadocs/content/roadmaps/${input.slug}.mdx`,
+          "main",
+        );
+        github.invalidate.tree(contentBase, "main");
       } catch {
         // If auto-merge fails (e.g. branch protection), leave PR open
       }
@@ -752,7 +769,7 @@ export const contentRouter = router({
         });
       }
 
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const contentBase = "apps/fumadocs/content/docs";
       const trackDir = `${contentBase}/${input.roadmap}/${trackSlug}`;
 
@@ -830,6 +847,11 @@ export const contentRouter = router({
       try {
         await github.mergePullRequest(pr.number, "merge");
         await github.deleteBranch(branchName);
+        // Auto-merge landed a new track directory on main — evict stale
+        // tree/meta reads that don't know about it yet.
+        github.invalidate.prefix(trackDir, "main");
+        github.invalidate.file(`${contentBase}/${input.roadmap}/meta.json`, "main");
+        github.invalidate.tree(`${contentBase}/${input.roadmap}`, "main");
       } catch {
         // If auto-merge fails (e.g. branch protection), leave PR open
       }
@@ -853,7 +875,7 @@ export const contentRouter = router({
         });
       }
 
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const filePath = contentFilePath(input.roadmap, input.slug, input.track);
 
       let fileSha: string;
@@ -904,7 +926,7 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const trackDir = `${CONTENT_DOCS_BASE}/${input.roadmap}/${input.track}`;
 
       try {
@@ -944,6 +966,11 @@ export const contentRouter = router({
         // Skip if meta.json is missing or invalid.
       }
 
+      // Evict any cached sub-tree listings under the removed track, and the
+      // roadmap-level listing that still shows the track folder.
+      github.invalidate.prefix(trackDir, "main");
+      github.invalidate.tree(`${CONTENT_DOCS_BASE}/${input.roadmap}`, "main");
+
       return { success: true, deletedFiles: trackFiles.length };
     }),
 
@@ -954,7 +981,7 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const roadmapDir = `${CONTENT_DOCS_BASE}/${input.roadmap}`;
 
       try {
@@ -1007,6 +1034,12 @@ export const contentRouter = router({
         // Skip if root meta.json is missing or invalid.
       }
 
+      // Evict any cached sub-trees under the removed roadmap, plus the
+      // top-level listings that still show the roadmap dir + metadata file.
+      github.invalidate.prefix(roadmapDir, "main");
+      github.invalidate.tree(CONTENT_DOCS_BASE, "main");
+      github.invalidate.tree("apps/fumadocs/content/roadmaps", "main");
+
       return { success: true, deletedFiles: roadmapFiles.length };
     }),
 
@@ -1036,7 +1069,7 @@ export const contentRouter = router({
         });
       }
 
-      const github = createGitHubService();
+      const github = getCachedGitHubService();
       const contentBase = "apps/fumadocs/content/docs";
 
       // Group items by track to determine which meta.json files to update
