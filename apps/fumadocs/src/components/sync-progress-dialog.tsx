@@ -4,9 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { useProgressStore } from "@/lib/progress-store";
-
-const SERVER_URL =
-  process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3000";
+import { trpcClient } from "@/lib/trpc";
 
 interface Mismatch {
   skillId: string;
@@ -44,15 +42,8 @@ export function SyncProgressDialog() {
 
     (async () => {
       try {
-        const res = await fetch(
-          `${SERVER_URL}/trpc/progress.getAllCompleted`,
-          { credentials: "include", cache: "no-store" },
-        );
-        if (!res.ok) return;
-
-        const json = await res.json();
-        const serverIds: string[] =
-          json?.result?.data?.completedIds ?? [];
+        const { completedIds: serverIds } =
+          await trpcClient.progress.getAllCompleted.query();
         const serverSet = new Set(serverIds);
         const localSet = new Set(localCompletedIds);
 
@@ -110,14 +101,10 @@ export function SyncProgressDialog() {
         }
       }
 
-      const res = await fetch(`${SERVER_URL}/trpc/progress.bulkSync`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ completedIds, uncompletedIds }),
+      await trpcClient.progress.bulkSync.mutate({
+        completedIds,
+        uncompletedIds,
       });
-
-      if (!res.ok) throw new Error("Sync failed");
 
       clearAll();
       setOpen(false);
