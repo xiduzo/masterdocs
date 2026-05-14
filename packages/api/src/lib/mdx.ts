@@ -1,9 +1,23 @@
 import { stringify, parse } from "yaml";
+import { z } from "zod";
 
-export interface MdxFrontmatter {
-  title: string;
-  description?: string;
-}
+/**
+ * Canonical schema for Topic MDX frontmatter.
+ *
+ * Roadmap/Track/Topic hierarchy is sourced from FS path + meta.json
+ * (see docs/adr/0001-content-structure-source.md). Frontmatter carries
+ * only display metadata.
+ *
+ * Default `.strip()` behaviour is intentional: legacy MDX files that
+ * still carry roadmap/track/trackOrder/topicOrder fields will have
+ * those fields silently dropped on parse and on the next save.
+ */
+export const mdxFrontmatterSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+});
+
+export type MdxFrontmatter = z.infer<typeof mdxFrontmatterSchema>;
 
 /**
  * Parse an MDX string into frontmatter and body.
@@ -25,14 +39,8 @@ export function parseMdx(raw: string): {
   }
 
   const yamlStr = raw.slice(openIdx + 3, closeIdx).trim();
-  const parsed = parse(yamlStr) as Record<string, unknown>;
-
-  const frontmatter: MdxFrontmatter = {
-    title: String(parsed.title ?? ""),
-  };
-
-  if (parsed.description !== undefined)
-    frontmatter.description = String(parsed.description);
+  const parsed = parse(yamlStr) ?? {};
+  const frontmatter = mdxFrontmatterSchema.parse(parsed);
 
   // Body is everything after the closing `---` delimiter line.
   // Strip exactly one leading newline (the blank line after closing ---).
@@ -53,11 +61,7 @@ export function serializeMdx(
   frontmatter: MdxFrontmatter,
   body: string,
 ): string {
-  // Build a clean object omitting undefined optional fields
-  const obj: Record<string, unknown> = { title: frontmatter.title };
-  if (frontmatter.description !== undefined)
-    obj.description = frontmatter.description;
-
+  const obj = mdxFrontmatterSchema.parse(frontmatter);
   const yamlStr = stringify(obj, { lineWidth: 0 }).trimEnd();
   return `---\n${yamlStr}\n---\n${body}`;
 }

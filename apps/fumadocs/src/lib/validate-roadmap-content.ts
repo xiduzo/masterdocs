@@ -4,9 +4,11 @@
  * Validates:
  * - All <Skill> components have `id` and `label` props (blocks build on missing)
  * - Skill ID uniqueness within each roadmap (blocks build on duplicates)
- * - Warns on invalid/missing roadmap frontmatter
  *
- * Requirements: 1.5, 2.4, 2.5
+ * Per ADR-0001 (docs/adr/0001-content-structure-source.md), Roadmap/Track
+ * membership is derived from the file's FS path, not from frontmatter.
+ *
+ * Requirements: 2.4, 2.5
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -20,14 +22,6 @@ interface SkillMatch {
   id: string | undefined;
   label: string | undefined;
   line: number;
-}
-
-interface FrontmatterData {
-  roadmap?: string;
-  track?: string;
-  trackTitle?: string;
-  trackOrder?: number;
-  topicOrder?: number;
 }
 
 interface ValidationResult {
@@ -49,30 +43,6 @@ function collectMdxFiles(dir: string): string[] {
     }
   }
   return files;
-}
-
-/** Extract YAML frontmatter from MDX content as a simple key-value map. */
-function parseFrontmatter(content: string): FrontmatterData | null {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return null;
-
-  const yaml = match[1];
-  const data: Record<string, string | number> = {};
-
-  for (const line of yaml.split("\n")) {
-    const kvMatch = line.match(/^(\w+):\s*(.+)$/);
-    if (kvMatch) {
-      const key = kvMatch[1];
-      let value: string | number = kvMatch[2].trim();
-      // Try to parse numbers
-      if (/^\d+$/.test(value)) {
-        value = Number.parseInt(value, 10);
-      }
-      data[key] = value;
-    }
-  }
-
-  return data as unknown as FrontmatterData;
 }
 
 /**
@@ -112,14 +82,11 @@ function findSkillComponents(content: string, filePath: string): SkillMatch[] {
   return matches;
 }
 
-// --- Roadmap frontmatter fields that must all be present together ---
-const ROADMAP_FIELDS = [
-  "roadmap",
-  "track",
-  "trackTitle",
-  "trackOrder",
-  "topicOrder",
-] as const;
+/** First segment of the file's path under content/docs is its roadmap slug. */
+function roadmapFromPath(relPath: string): string | undefined {
+  const segments = relPath.split("/");
+  return segments.length > 1 ? segments[0] : undefined;
+}
 
 // --- Main validation ---
 
@@ -152,28 +119,9 @@ export function validateRoadmapContent(contentDocsDir: string): ValidationResult
       continue;
     }
 
-    // --- Frontmatter validation ---
-    const frontmatter = parseFrontmatter(content);
-
-    if (frontmatter) {
-      const presentFields = ROADMAP_FIELDS.filter(
-        (f) => frontmatter[f] !== undefined && frontmatter[f] !== "",
-      );
-      const missingFields = ROADMAP_FIELDS.filter(
-        (f) => frontmatter[f] === undefined || frontmatter[f] === "",
-      );
-
-      // If some roadmap fields are present but not all, warn about incomplete frontmatter
-      if (presentFields.length > 0 && missingFields.length > 0) {
-        warnings.push(
-          `[${relPath}] Incomplete roadmap frontmatter: missing ${missingFields.join(", ")}. ` +
-            "This topic will be excluded from roadmap views.",
-        );
-      }
-    }
-
     // --- Skill component validation ---
     const skills = findSkillComponents(content, relPath);
+    const roadmapSlug = roadmapFromPath(relPath);
 
     for (const skill of skills) {
       // Validate required props (Requirement 2.4)
@@ -189,8 +137,7 @@ export function validateRoadmapContent(contentDocsDir: string): ValidationResult
       }
 
       // Collect for uniqueness check if we have a valid id and the file belongs to a roadmap
-      if (skill.id && frontmatter?.roadmap) {
-        const roadmapSlug = frontmatter.roadmap;
+      if (skill.id && roadmapSlug) {
         if (!skillsByRoadmap.has(roadmapSlug)) {
           skillsByRoadmap.set(roadmapSlug, []);
         }
