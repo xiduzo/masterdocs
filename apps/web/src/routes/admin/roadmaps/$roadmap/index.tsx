@@ -32,6 +32,12 @@ import {
 import { File, FolderOpen, GripVertical, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  fromContentList,
+  type Topic as RoadmapTopic,
+  type Track as RoadmapTrack,
+} from "@masterdocs/api/lib/roadmap-tree";
+
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 export const Route = createFileRoute("/admin/roadmaps/$roadmap/")({
@@ -91,21 +97,6 @@ function reorderTrackFiles(files: ContentFile[], trackSlug: string, orderedSlugs
   });
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface TopicItem {
-  slug: string;
-  title: string;
-  state: "published" | "pending_review";
-  track: string;
-}
-
-interface TrackSection {
-  slug: string;
-  title: string;
-  topics: TopicItem[];
-}
-
 // ─── Route component ──────────────────────────────────────────────────────────
 
 function RoadmapEditor() {
@@ -132,34 +123,13 @@ function RoadmapEditor() {
     [data, roadmap],
   );
 
-  const roadmapTitle = useMemo(() => {
-    const indexFile = roadmapData?.files.find((f) => f.slug === "index");
-    return indexFile?.title ?? slugToTitle(roadmap);
-  }, [roadmapData, roadmap]);
+  const roadmapTree = useMemo(
+    () => (roadmapData ? fromContentList(roadmapData) : undefined),
+    [roadmapData],
+  );
 
-  const tracks = useMemo<TrackSection[]>(() => {
-    if (!roadmapData) return [];
-    const trackMap = new Map<string, TrackSection>();
-    for (const file of roadmapData.files) {
-      if (!file.track) continue;
-      if (!trackMap.has(file.track)) {
-        trackMap.set(file.track, {
-          slug: file.track,
-          title: (file as typeof file & { trackTitle?: string }).trackTitle ?? slugToTitle(file.track),
-          topics: [],
-        });
-      }
-      if (file.slug !== "index") {
-        trackMap.get(file.track)!.topics.push({
-          slug: file.slug,
-          title: file.title,
-          state: file.state as "published" | "pending_review",
-          track: file.track,
-        });
-      }
-    }
-    return [...trackMap.values()];
-  }, [roadmapData]);
+  const roadmapTitle = roadmapTree?.title ?? slugToTitle(roadmap);
+  const tracks = roadmapTree?.tracks ?? [];
 
   const handleTrackDragStart = (event: DragStartEvent) => {
     setActiveTrackId(String(event.active.id));
@@ -177,7 +147,7 @@ function RoadmapEditor() {
     const reordered = arrayMove(tracks, oldIndex, newIndex);
     const orderedTracks = reordered.map((t) => t.slug);
     const items = reordered.flatMap((track, i) =>
-      track.topics.map((topic) => ({ slug: topic.slug, track: topic.track, trackOrder: i + 1 })),
+      track.topics.map((topic) => ({ slug: topic.slug, track: track.slug, trackOrder: i + 1 })),
     );
 
     await queryClient.cancelQueries({ queryKey: contentListQueryKey });
@@ -198,7 +168,7 @@ function RoadmapEditor() {
     );
   };
 
-  const handleTopicDragEnd = async (track: TrackSection, event: DragEndEvent) => {
+  const handleTopicDragEnd = async (track: RoadmapTrack, event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -208,7 +178,7 @@ function RoadmapEditor() {
 
     const reordered = arrayMove(track.topics, oldIndex, newIndex);
     const orderedSlugs = reordered.map((t) => t.slug);
-    const items = reordered.map((topic, i) => ({ slug: topic.slug, track: topic.track, topicOrder: i + 1 }));
+    const items = reordered.map((topic, i) => ({ slug: topic.slug, track: track.slug, topicOrder: i + 1 }));
 
     await queryClient.cancelQueries({ queryKey: contentListQueryKey });
     const previous = queryClient.getQueryData<ContentList>(contentListQueryKey);
@@ -292,7 +262,7 @@ function RoadmapEditor() {
                   >
                     <SortableContext items={trackIds} strategy={verticalListSortingStrategy}>
                       {tracks.map((track) => (
-                        <SortableTrackSection
+                        <SortableRoadmapTrack
                           key={track.slug}
                           track={track}
                           roadmap={roadmap}
@@ -347,9 +317,9 @@ function RoadmapEditor() {
   );
 }
 
-// ─── SortableTrackSection ─────────────────────────────────────────────────────
+// ─── SortableRoadmapTrack ─────────────────────────────────────────────────────
 
-function SortableTrackSection({
+function SortableRoadmapTrack({
   track,
   roadmap,
   sensors,
@@ -361,7 +331,7 @@ function SortableTrackSection({
   isCreatingTopic,
   isBeingDragged,
 }: {
-  track: TrackSection;
+  track: RoadmapTrack;
   roadmap: string;
   sensors: ReturnType<typeof useSensors>;
   onTopicDragEnd: (event: DragEndEvent) => void;
@@ -476,7 +446,7 @@ function SortableTopicRow({
   parentTransform,
   parentTransition,
 }: {
-  topic: TopicItem;
+  topic: RoadmapTopic;
   roadmap: string;
   hidden?: boolean;
   parentTransform?: Parameters<typeof CSS.Transform.toString>[0] | null;
@@ -539,7 +509,7 @@ function SortableTopicRow({
 
 // ─── TrackDragOverlay ─────────────────────────────────────────────────────────
 
-function TrackDragOverlay({ track }: { track: TrackSection }) {
+function TrackDragOverlay({ track }: { track: RoadmapTrack }) {
   return (
     <div className="rounded-lg border bg-background shadow-lg overflow-hidden w-[480px] opacity-95">
       <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b">

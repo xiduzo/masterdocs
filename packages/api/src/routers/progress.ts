@@ -5,7 +5,8 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { db } from "@masterdocs/db";
 import { skillProgress } from "@masterdocs/db/schema/skill-progress";
-import { getRoadmapContent } from "../lib/roadmap-content";
+import { allSkillIds } from "../lib/roadmap-tree";
+import { fromFsWalk } from "../lib/roadmap-tree-fs";
 
 export const progressRouter = router({
   toggleSkill: protectedProcedure
@@ -53,8 +54,7 @@ export const progressRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      // Resolve roadmap structure from content files
-      const roadmap = getRoadmapContent(input.roadmapSlug);
+      const roadmap = fromFsWalk(input.roadmapSlug);
       if (!roadmap) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -62,18 +62,15 @@ export const progressRouter = router({
         });
       }
 
-      // Collect all skill IDs across all tracks/topics in this roadmap
-      const allSkillIds = roadmap.tracks.flatMap((track) => track.skillIds);
-
-      if (allSkillIds.length === 0) {
+      const skillIds = allSkillIds(roadmap);
+      if (skillIds.length === 0) {
         return { records: [] };
       }
 
-      // Fetch only progress records for skills within this roadmap
       const records = await db.query.skillProgress.findMany({
         where: and(
           eq(skillProgress.userId, userId),
-          inArray(skillProgress.skillId, allSkillIds),
+          inArray(skillProgress.skillId, skillIds),
         ),
       });
 
@@ -94,8 +91,7 @@ export const progressRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      // Resolve roadmap structure from content files
-      const roadmap = getRoadmapContent(input.roadmapSlug);
+      const roadmap = fromFsWalk(input.roadmapSlug);
       if (!roadmap) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -103,34 +99,30 @@ export const progressRouter = router({
         });
       }
 
-      // Collect all skill IDs for the roadmap
-      const allSkillIds = roadmap.tracks.flatMap((track) => track.skillIds);
+      const skillIds = allSkillIds(roadmap);
 
-      // Fetch completed skill records for this user within this roadmap
       let completedSkillIds: Set<string>;
-      if (allSkillIds.length === 0) {
+      if (skillIds.length === 0) {
         completedSkillIds = new Set();
       } else {
         const records = await db.query.skillProgress.findMany({
           where: and(
             eq(skillProgress.userId, userId),
-            inArray(skillProgress.skillId, allSkillIds),
+            inArray(skillProgress.skillId, skillIds),
           ),
         });
         completedSkillIds = new Set(records.map((r) => r.skillId));
       }
 
-      // Compute per-track counts
       const tracks = roadmap.tracks.map((track) => ({
         trackSlug: track.slug,
         completed: track.skillIds.filter((id) => completedSkillIds.has(id)).length,
         total: track.skillIds.length,
       }));
 
-      // Compute overall counts
       const overall = {
-        completed: allSkillIds.filter((id) => completedSkillIds.has(id)).length,
-        total: allSkillIds.length,
+        completed: skillIds.filter((id) => completedSkillIds.has(id)).length,
+        total: skillIds.length,
       };
 
       return { tracks, overall };

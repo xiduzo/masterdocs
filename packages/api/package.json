@@ -9,7 +9,10 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "bun test",
+    "check-types": "tsc --noEmit"
+  },
   "dependencies": {
     "@masterdocs/auth": "workspace:*",
     "@masterdocs/db": "workspace:*",
