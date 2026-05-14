@@ -5,6 +5,10 @@ import { protectedProcedure, router } from "../index";
 import type { GitHubService } from "../lib/github";
 import { getCachedGitHubService } from "../lib/github-cache";
 import { type MdxFrontmatter, isValidSlug, parseMdx, serializeMdx } from "../lib/mdx";
+import {
+  ContentMergeConflictError,
+  getContentRepository,
+} from "../lib/octokit-content-repository";
 
 // Deterministic branch name derived from content coordinates.
 // filePath is fully recoverable from this, eliminating DB as source of truth.
@@ -380,51 +384,12 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const github = getCachedGitHubService();
-
-      // 1. Serialize MDX from frontmatter + body
-      const mdxContent = serializeMdx(input.frontmatter, input.body);
-      const filePath = contentFilePath(input.roadmap, input.slug, input.track);
-      const branchName = contentBranchName(input.roadmap, input.slug, input.track);
-
-      // 2. Check for an existing open PR via GitHub — no DB needed
-      const existingPR = await github.getPRByBranch(branchName);
-      if (existingPR) {
-        const { sha: currentFileSha } = await github.getFileContent(filePath, branchName);
-        await github.createOrUpdateFile({
-          path: filePath,
-          content: mdxContent,
-          message: `Content update: ${input.frontmatter.title}`,
-          branch: branchName,
-          sha: currentFileSha,
-        });
-        await github.updatePullRequest({
-          prNumber: existingPR.prNumber,
-          title: `Content update: ${input.frontmatter.title}`,
-        });
-        return { prNumber: existingPR.prNumber, branchName, isNew: false };
-      }
-
-      // 3. No open PR — clean up stale branch if it exists, then create fresh
-      if (await github.branchExists(branchName)) {
-        await github.deleteBranch(branchName);
-      }
-      const mainSha = await github.getMainHeadSha();
-      await github.createBranch(branchName, mainSha);
-      await github.createOrUpdateFile({
-        path: filePath,
-        content: mdxContent,
-        message: `Content update: ${input.frontmatter.title}`,
-        branch: branchName,
-        sha: input.fileSha,
+      return getContentRepository().submitTopicEdit({
+        coords: { roadmap: input.roadmap, slug: input.slug, track: input.track },
+        frontmatter: input.frontmatter,
+        body: input.body,
+        fileSha: input.fileSha,
       });
-      const pr = await github.createPullRequest({
-        title: `Content update: ${input.frontmatter.title}`,
-        body: `Updated content file: ${filePath}`,
-        head: branchName,
-        base: "main",
-      });
-      return { prNumber: pr.number, branchName, isNew: true };
     }),
 
   create: adminProcedure
@@ -516,36 +481,21 @@ export const contentRouter = router({
   publish: adminProcedure
     .input(z.object({ prNumber: z.number() }))
     .mutation(async ({ input }) => {
-      const github = getCachedGitHubService();
-      const pr = await github.getPR(input.prNumber);
-
       try {
-        await github.mergePullRequest(pr.prNumber, "merge");
+        await getContentRepository().publishTopic(input.prNumber);
       } catch (err) {
-        if (err instanceof Error && err.message.toLowerCase().includes("conflict")) {
-          throw new TRPCError({ code: "CONFLICT", message: "Merge conflict detected" });
+        if (err instanceof ContentMergeConflictError) {
+          throw new TRPCError({ code: "CONFLICT", message: err.message });
         }
         throw err;
       }
-
-      // The merged file now exists on main — evict stale main-branch reads
-      // for that file and the directory listing that contained it.
-      const mergedFilePath = filePathFromBranch(pr.branchName);
-      github.invalidate.file(mergedFilePath, "main");
-      const mergedParent = mergedFilePath.slice(0, mergedFilePath.lastIndexOf("/"));
-      github.invalidate.tree(mergedParent, "main");
-
-      await github.deleteBranch(pr.branchName);
       return { success: true };
     }),
 
   discard: adminProcedure
     .input(z.object({ prNumber: z.number() }))
     .mutation(async ({ input }) => {
-      const github = getCachedGitHubService();
-      const pr = await github.getPR(input.prNumber);
-      await github.closePullRequest(pr.prNumber);
-      await github.deleteBranch(pr.branchName);
+      await getContentRepository().discardTopic(input.prNumber);
       return { success: true };
     }),
 
