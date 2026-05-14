@@ -36,6 +36,14 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 export const Route = createFileRoute("/admin/roadmaps/$roadmap/")({
   component: RoadmapEditor,
+  staticData: {
+    crumb: (params) => [
+      {
+        label: slugToTitle(params.roadmap ?? ""),
+        href: `/admin/roadmaps/${params.roadmap}/`,
+      },
+    ],
+  },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

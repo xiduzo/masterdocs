@@ -27,6 +27,9 @@ import { trpc } from "@/utils/trpc";
 
 export const Route = createFileRoute("/admin/roadmaps/")({
   component: RoadmapsDashboard,
+  staticData: {
+    crumb: () => [{ label: "Roadmaps", href: "/admin/roadmaps" }],
+  },
 });
 
 // Deterministic icon + color per roadmap slug

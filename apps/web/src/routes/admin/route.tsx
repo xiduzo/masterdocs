@@ -9,6 +9,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
+import type { Crumb } from "@/routes/-breadcrumbs";
 import { cn } from "@masterdocs/ui/lib/utils";
 import {
   BookOpen,
@@ -28,34 +29,13 @@ export const Route = createFileRoute("/admin")({
   },
 });
 
-function slugToTitle(slug: string) {
-  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-interface Crumb {
-  label: string;
-  href?: string;
-}
-
 function useBreadcrumbs(): Crumb[] {
   const matches = useMatches();
-  const crumbs: Crumb[] = [];
-
-  for (const match of matches) {
-    const id = match.routeId as string;
-    const params = match.params as Record<string, string>;
-
-    if (id === "/admin/roadmaps/") {
-      crumbs.push({ label: "Roadmaps", href: "/admin/roadmaps" });
-    } else if (id === "/admin/roadmaps/$roadmap/") {
-      crumbs.push({ label: slugToTitle(params.roadmap), href: `/admin/roadmaps/${params.roadmap}/` });
-    } else if (id === "/admin/roadmaps/$roadmap/tracks/$slug") {
-      crumbs.push({ label: slugToTitle(params.slug) });
-    } else if (id === "/admin/roadmaps/$roadmap/tracks/$track/$slug") {
-      crumbs.push({ label: slugToTitle(params.track) });
-      crumbs.push({ label: slugToTitle(params.slug) });
-    }
-  }
+  const crumbs: Crumb[] = matches.flatMap(
+    (m) =>
+      m.staticData?.crumb?.(m.params as Record<string, string | undefined>) ??
+      [],
+  );
 
   if (crumbs.length > 0) {
     delete crumbs[crumbs.length - 1].href;

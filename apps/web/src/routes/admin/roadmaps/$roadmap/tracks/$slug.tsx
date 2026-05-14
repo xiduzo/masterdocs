@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { ContentEditorView } from "@/components/content/editor-view";
+import { slugToTitle } from "@/routes/-breadcrumbs";
 
 const searchSchema = z.object({
   fromBranch: z.boolean().optional(),
@@ -10,6 +11,9 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/admin/roadmaps/$roadmap/tracks/$slug")({
   component: ContentEditor,
   validateSearch: searchSchema,
+  staticData: {
+    crumb: (params) => [{ label: slugToTitle(params.slug ?? "") }],
+  },
 });
 
 function ContentEditor() {
