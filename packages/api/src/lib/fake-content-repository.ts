@@ -12,6 +12,7 @@ import { contentBranchName, contentFilePath } from "./content-paths";
 import { serializeMdx } from "./mdx";
 import {
   ContentMergeConflictError,
+  type ConflictStatus,
   type ContentCoords,
   type ContentRepository,
   type SubmitTopicEditResult,
@@ -32,14 +33,24 @@ interface PendingPR {
 export class FakeContentRepository implements ContentRepository {
   private nextPrNumber = 1;
   private nextShaCounter = 1;
+  private mainShaCounter = 1;
+  private currentMainSha = `main-sha-${this.mainShaCounter}`;
   private readonly main = new Map<string, BranchFile>();
   private readonly prs = new Map<number, PendingPR>();
   private readonly prsByBranch = new Map<string, PendingPR>();
+  /** Main HEAD sha captured when each Submission opened. */
+  private readonly prBaseSha = new Map<number, string>();
+  /** File paths modified on main since each Submission opened. */
+  private readonly prMainModifiedFiles = new Map<number, Set<string>>();
   /** When true, the next `publishTopic` call throws ContentMergeConflictError. */
   public simulateMergeConflict = false;
 
   private fakeSha(): string {
     return `sha-${this.nextShaCounter++}`;
+  }
+
+  private advanceMainSha(): void {
+    this.currentMainSha = `main-sha-${++this.mainShaCounter}`;
   }
 
   // ── Repository interface ─────────────────────────────────────────────────
@@ -78,6 +89,8 @@ export class FakeContentRepository implements ContentRepository {
     };
     this.prs.set(pr.prNumber, pr);
     this.prsByBranch.set(pr.branchName, pr);
+    this.prBaseSha.set(pr.prNumber, this.currentMainSha);
+    this.prMainModifiedFiles.set(pr.prNumber, new Set());
     return { prNumber: pr.prNumber, branchName: pr.branchName, isNew: true };
   }
 
@@ -105,6 +118,46 @@ export class FakeContentRepository implements ContentRepository {
     if (!pr) throw new Error(`No such PR: ${prNumber}`);
     this.prs.delete(pr.prNumber);
     this.prsByBranch.delete(pr.branchName);
+    this.prBaseSha.delete(pr.prNumber);
+    this.prMainModifiedFiles.delete(pr.prNumber);
+  }
+
+  async checkConflict(prNumber: number): Promise<ConflictStatus> {
+    const pr = this.prs.get(prNumber);
+    if (!pr) throw new Error(`No such PR: ${prNumber}`);
+    const baseSha = this.prBaseSha.get(prNumber)!;
+    const mainAdvanced = baseSha !== this.currentMainSha;
+    if (!mainAdvanced) {
+      return { hasConflict: false, mainAdvanced: false, currentMainSha: this.currentMainSha };
+    }
+    const modified = this.prMainModifiedFiles.get(prNumber)!;
+    return {
+      hasConflict: modified.has(pr.file.path),
+      mainAdvanced: true,
+      currentMainSha: this.currentMainSha,
+    };
+  }
+
+  async keepMineOnConflict(prNumber: number): Promise<void> {
+    const pr = this.prs.get(prNumber);
+    if (!pr) throw new Error(`No such PR: ${prNumber}`);
+    // Re-push: bump the file sha as if a fresh commit landed.
+    pr.file.sha = this.fakeSha();
+  }
+
+  async useMainOnConflict(prNumber: number): Promise<void> {
+    await this.discardTopic(prNumber);
+  }
+
+  async submitMergedContent({
+    prNumber,
+    frontmatter,
+    body,
+  }: Parameters<ContentRepository["submitMergedContent"]>[0]): Promise<void> {
+    const pr = this.prs.get(prNumber);
+    if (!pr) throw new Error(`No such PR: ${prNumber}`);
+    pr.file.content = serializeMdx(frontmatter, body);
+    pr.file.sha = this.fakeSha();
   }
 
   // ── Test helpers ─────────────────────────────────────────────────────────
@@ -127,5 +180,27 @@ export class FakeContentRepository implements ContentRepository {
       content,
       sha: this.fakeSha(),
     });
+  }
+
+  /**
+   * Simulate `main` advancing for unrelated reasons (some other PR
+   * merged). All open Submissions will see `mainAdvanced: true` on
+   * their next checkConflict, but `hasConflict: false` unless the
+   * specific Topic file was also touched.
+   */
+  advanceMainUnrelated(): void {
+    this.advanceMainSha();
+  }
+
+  /**
+   * Simulate `main` advancing AND modifying the Topic file behind the
+   * given Submission. Subsequent checkConflict will return
+   * `hasConflict: true`.
+   */
+  simulateConflictingMainEdit(prNumber: number): void {
+    const pr = this.prs.get(prNumber);
+    if (!pr) throw new Error(`No such PR: ${prNumber}`);
+    this.advanceMainSha();
+    this.prMainModifiedFiles.get(prNumber)?.add(pr.file.path);
   }
 }

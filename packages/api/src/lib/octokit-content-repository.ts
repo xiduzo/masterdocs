@@ -18,6 +18,7 @@ import {
 import { serializeMdx } from "./mdx";
 import {
   ContentMergeConflictError,
+  type ConflictStatus,
   type ContentRepository,
   type SubmitTopicEditResult,
 } from "./content-repository";
@@ -114,6 +115,62 @@ class OctokitContentRepository implements ContentRepository {
     const pr = await this.github.getPR(prNumber);
     await this.github.closePullRequest(pr.prNumber);
     await this.github.deleteBranch(pr.branchName);
+  }
+
+  async checkConflict(prNumber: number): Promise<ConflictStatus> {
+    const pr = await this.github.getPR(prNumber);
+    const mainSha = await this.github.getMainHeadSha();
+
+    if (mainSha === pr.baseSha) {
+      return { hasConflict: false, mainAdvanced: false, currentMainSha: mainSha };
+    }
+
+    const filePath = filePathFromBranch(pr.branchName);
+    const comparison = await this.github.compareCommits(pr.baseSha, mainSha);
+    const fileWasModified = comparison.files.some((f) => f.filename === filePath);
+
+    return { hasConflict: fileWasModified, mainAdvanced: true, currentMainSha: mainSha };
+  }
+
+  async keepMineOnConflict(prNumber: number): Promise<void> {
+    const pr = await this.github.getPR(prNumber);
+    const filePath = filePathFromBranch(pr.branchName);
+    const { content, sha: fileSha } = await this.github.getFileContent(
+      filePath,
+      pr.branchName,
+    );
+    // Re-push the existing content as a fresh commit so GitHub re-evaluates merge state.
+    await this.github.createOrUpdateFile({
+      path: filePath,
+      content,
+      message: `Resolve conflict: keep my changes for ${filePath}`,
+      branch: pr.branchName,
+      sha: fileSha,
+    });
+  }
+
+  async useMainOnConflict(prNumber: number): Promise<void> {
+    // Semantically distinct intent ("accept the published version") but
+    // mechanically identical to discard.
+    await this.discardTopic(prNumber);
+  }
+
+  async submitMergedContent({
+    prNumber,
+    frontmatter,
+    body,
+  }: Parameters<ContentRepository["submitMergedContent"]>[0]): Promise<void> {
+    const pr = await this.github.getPR(prNumber);
+    const filePath = filePathFromBranch(pr.branchName);
+    const mdxContent = serializeMdx(frontmatter, body);
+    const { sha: fileSha } = await this.github.getFileContent(filePath, pr.branchName);
+    await this.github.createOrUpdateFile({
+      path: filePath,
+      content: mdxContent,
+      message: `Resolve conflict: manual edit for ${filePath}`,
+      branch: pr.branchName,
+      sha: fileSha,
+    });
   }
 }
 

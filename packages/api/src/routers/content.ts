@@ -502,80 +502,41 @@ export const contentRouter = router({
   checkConflict: adminProcedure
     .input(z.object({ prNumber: z.number() }))
     .query(async ({ input }) => {
-      const github = getCachedGitHubService();
-      const pr = await github.getPR(input.prNumber);
-      const mainSha = await github.getMainHeadSha();
-
-      if (mainSha === pr.baseSha) {
-        return { hasConflict: false, mainAdvanced: false, currentMainSha: mainSha };
-      }
-
-      const filePath = filePathFromBranch(pr.branchName);
-      const comparison = await github.compareCommits(pr.baseSha, mainSha);
-      const fileWasModified = comparison.files.some((f) => f.filename === filePath);
-
-      return { hasConflict: fileWasModified, mainAdvanced: true, currentMainSha: mainSha };
+      return getContentRepository().checkConflict(input.prNumber);
     }),
 
-  resolveConflict: adminProcedure
+  keepMineOnConflict: adminProcedure
+    .input(z.object({ prNumber: z.number() }))
+    .mutation(async ({ input }) => {
+      await getContentRepository().keepMineOnConflict(input.prNumber);
+      return { success: true };
+    }),
+
+  useMainOnConflict: adminProcedure
+    .input(z.object({ prNumber: z.number() }))
+    .mutation(async ({ input }) => {
+      await getContentRepository().useMainOnConflict(input.prNumber);
+      return { success: true };
+    }),
+
+  submitMergedContent: adminProcedure
     .input(
       z.object({
         prNumber: z.number(),
-        strategy: z.enum(["keep_mine", "use_main", "manual"]),
-        manualContent: z
-          .object({
-            frontmatter: z.object({
-              title: z.string().min(1),
-              description: z.string().optional(),
-            }),
-            body: z.string(),
-          })
-          .optional(),
+        frontmatter: z.object({
+          title: z.string().min(1),
+          description: z.string().optional(),
+        }),
+        body: z.string(),
       }),
     )
     .mutation(async ({ input }) => {
-      const github = getCachedGitHubService();
-      const pr = await github.getPR(input.prNumber);
-      const filePath = filePathFromBranch(pr.branchName);
-
-      switch (input.strategy) {
-        case "keep_mine": {
-          const { content, sha: fileSha } = await github.getFileContent(filePath, pr.branchName);
-          await github.createOrUpdateFile({
-            path: filePath,
-            content,
-            message: `Resolve conflict: keep my changes for ${filePath}`,
-            branch: pr.branchName,
-            sha: fileSha,
-          });
-          return { success: true };
-        }
-
-        case "use_main": {
-          await github.closePullRequest(pr.prNumber);
-          await github.deleteBranch(pr.branchName);
-          return { success: true };
-        }
-
-        case "manual": {
-          if (!input.manualContent) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Manual content is required for manual resolution strategy",
-            });
-          }
-          const mdxContent = serializeMdx(input.manualContent.frontmatter, input.manualContent.body);
-          const { sha: fileSha } = await github.getFileContent(filePath, pr.branchName);
-          await github.createOrUpdateFile({
-            path: filePath,
-            content: mdxContent,
-            message: `Resolve conflict: manual edit for ${filePath}`,
-            branch: pr.branchName,
-            sha: fileSha,
-          });
-          return { success: true };
-        }
-      }
+      await getContentRepository().submitMergedContent({
+        prNumber: input.prNumber,
+        frontmatter: input.frontmatter,
+        body: input.body,
+      });
+      return { success: true };
     }),
 
   /** Create an entirely new roadmap (directory + scaffolding files). */

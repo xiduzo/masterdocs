@@ -29,13 +29,18 @@ export function ConflictResolver({
   const [mode, setMode] = useState<"compare" | "edit">("compare");
   const [manualBody, setManualBody] = useState(submittedBody);
 
-  const resolveMutation = useMutation(
-    trpc.content.resolveConflict.mutationOptions(),
+  const keepMine = useMutation(trpc.content.keepMineOnConflict.mutationOptions());
+  const useMain = useMutation(trpc.content.useMainOnConflict.mutationOptions());
+  const submitMerged = useMutation(
+    trpc.content.submitMergedContent.mutationOptions(),
   );
 
+  const isResolving =
+    keepMine.isPending || useMain.isPending || submitMerged.isPending;
+
   const handleKeepMine = () => {
-    resolveMutation.mutate(
-      { prNumber, strategy: "keep_mine" },
+    keepMine.mutate(
+      { prNumber },
       {
         onSuccess: () => {
           toast.success("Conflict resolved — kept your changes");
@@ -49,8 +54,8 @@ export function ConflictResolver({
   };
 
   const handleUseMain = () => {
-    resolveMutation.mutate(
-      { prNumber, strategy: "use_main" },
+    useMain.mutate(
+      { prNumber },
       {
         onSuccess: () => {
           toast.success("Conflict resolved — reverted to published version");
@@ -68,12 +73,8 @@ export function ConflictResolver({
       title: "Untitled",
     };
 
-    resolveMutation.mutate(
-      {
-        prNumber,
-        strategy: "manual",
-        manualContent: { frontmatter, body: manualBody },
-      },
+    submitMerged.mutate(
+      { prNumber, frontmatter, body: manualBody },
       {
         onSuccess: () => {
           toast.success("Conflict resolved — combined content submitted");
@@ -131,9 +132,9 @@ export function ConflictResolver({
             <Button
               size="sm"
               onClick={handleSubmitManual}
-              disabled={resolveMutation.isPending}
+              disabled={isResolving}
             >
-              {resolveMutation.isPending
+              {isResolving
                 ? "Submitting…"
                 : "Submit combined content"}
             </Button>
@@ -177,23 +178,23 @@ export function ConflictResolver({
         <Button
           size="sm"
           onClick={handleKeepMine}
-          disabled={resolveMutation.isPending}
+          disabled={isResolving}
         >
-          {resolveMutation.isPending ? "Resolving…" : "Keep My Changes"}
+          {isResolving ? "Resolving…" : "Keep My Changes"}
         </Button>
         <Button
           size="sm"
           variant="outline"
           onClick={handleUseMain}
-          disabled={resolveMutation.isPending}
+          disabled={isResolving}
         >
-          {resolveMutation.isPending ? "Resolving…" : "Use published version"}
+          {isResolving ? "Resolving…" : "Use published version"}
         </Button>
         <Button
           size="sm"
           variant="secondary"
           onClick={() => setMode("edit")}
-          disabled={resolveMutation.isPending}
+          disabled={isResolving}
         >
           Edit Manually
         </Button>

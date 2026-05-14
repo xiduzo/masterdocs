@@ -58,6 +58,45 @@ export interface ContentRepository {
 
   /** Discard a Submission — close the PR and delete its branch. */
   discardTopic(prNumber: number): Promise<void>;
+
+  /**
+   * Inspect whether a Submission's base branch has advanced on main, and
+   * whether that advance touched the target Topic file.
+   */
+  checkConflict(prNumber: number): Promise<ConflictStatus>;
+
+  /**
+   * Resolve a conflict by re-pushing the Submission's own file content
+   * (forces a fresh merge attempt). The PR stays open.
+   */
+  keepMineOnConflict(prNumber: number): Promise<void>;
+
+  /**
+   * Resolve a conflict by accepting the version of the Topic currently
+   * on main. Closes the Submission — semantically equivalent to discard,
+   * but expressed with the intent the operator selected in the UI.
+   */
+  useMainOnConflict(prNumber: number): Promise<void>;
+
+  /**
+   * Resolve a conflict by submitting a manually-merged version of the
+   * Topic. Rewrites the Submission's file with the new MDX; the PR stays
+   * open for re-merge.
+   */
+  submitMergedContent(params: {
+    prNumber: number;
+    frontmatter: MdxFrontmatter;
+    body: string;
+  }): Promise<void>;
+}
+
+export interface ConflictStatus {
+  /** True if the Topic file was modified on main since the Submission opened. */
+  hasConflict: boolean;
+  /** True if main has advanced at all since the Submission opened, regardless of conflict. */
+  mainAdvanced: boolean;
+  /** Current main HEAD sha. */
+  currentMainSha: string;
 }
 
 /**

@@ -99,3 +99,74 @@ describe("discardTopic", () => {
     expect(second.prNumber).not.toBe(first.prNumber);
   });
 });
+
+describe("checkConflict", () => {
+  test("reports no conflict when main has not advanced", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    const status = await repo.checkConflict(prNumber);
+    expect(status.hasConflict).toBe(false);
+    expect(status.mainAdvanced).toBe(false);
+  });
+
+  test("reports mainAdvanced but no conflict when main moved without touching the file", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    repo.advanceMainUnrelated();
+    const status = await repo.checkConflict(prNumber);
+    expect(status.mainAdvanced).toBe(true);
+    expect(status.hasConflict).toBe(false);
+  });
+
+  test("reports conflict when the target file was modified on main", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    repo.simulateConflictingMainEdit(prNumber);
+    const status = await repo.checkConflict(prNumber);
+    expect(status.mainAdvanced).toBe(true);
+    expect(status.hasConflict).toBe(true);
+  });
+});
+
+describe("keepMineOnConflict", () => {
+  test("bumps the branch file sha, leaves the Submission open", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    const before = repo.pendingPRs()[0]!.file.sha;
+    await repo.keepMineOnConflict(prNumber);
+    const after = repo.pendingPRs()[0]!.file.sha;
+    expect(after).not.toBe(before);
+    expect(repo.pendingPRs()).toHaveLength(1);
+  });
+});
+
+describe("useMainOnConflict", () => {
+  test("closes the Submission without writing to main", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    await repo.useMainOnConflict(prNumber);
+    expect(repo.pendingPRs()).toHaveLength(0);
+    expect(repo.mainFiles()).toHaveLength(0);
+  });
+});
+
+describe("submitMergedContent", () => {
+  test("rewrites the branch file with new MDX, bumps sha", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    const before = repo.pendingPRs()[0]!.file.sha;
+    await repo.submitMergedContent({
+      prNumber,
+      frontmatter: { title: "Merged" },
+      body: "merged body",
+    });
+    const after = repo.pendingPRs()[0]!;
+    expect(after.file.sha).not.toBe(before);
+    expect(after.file.content).toContain("Merged");
+    expect(after.file.content).toContain("merged body");
+  });
+
+  test("leaves the Submission open for republish", async () => {
+    const { prNumber } = await repo.submitTopicEdit(ARDUINO_TEMP);
+    await repo.submitMergedContent({
+      prNumber,
+      frontmatter: { title: "Merged" },
+      body: "body",
+    });
+    expect(repo.pendingPRs()).toHaveLength(1);
+  });
+});
