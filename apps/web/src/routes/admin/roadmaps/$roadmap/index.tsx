@@ -38,7 +38,7 @@ import {
   type Track as RoadmapTrack,
 } from "@masterdocs/api/lib/roadmap-tree";
 
-import { trpc, type RouterOutputs } from "@/utils/trpc";
+import { trpc } from "@/utils/trpc";
 
 export const Route = createFileRoute("/admin/roadmaps/$roadmap/")({
   component: RoadmapEditor,
@@ -70,33 +70,6 @@ function slugToTitle(slug: string) {
   return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Optimistic update helpers (previously in tree-utils)
-type ContentList = RouterOutputs["content"]["list"];
-type ContentGroup = ContentList[number];
-type ContentFile = ContentGroup["files"][number];
-
-function updateRoadmapFiles(
-  groups: ContentList,
-  roadmap: string,
-  fn: (files: ContentFile[]) => ContentFile[],
-): ContentList {
-  return groups.map((g) => (g.roadmap === roadmap ? { ...g, files: fn(g.files) } : g));
-}
-
-function reorderTracks(files: ContentFile[], orderedTracks: string[]): ContentFile[] {
-  return files.map((f) =>
-    f.track ? { ...f, trackOrder: orderedTracks.indexOf(f.track) + 1 } : f,
-  );
-}
-
-function reorderTrackFiles(files: ContentFile[], trackSlug: string, orderedSlugs: string[]): ContentFile[] {
-  return files.map((f) => {
-    if (f.track !== trackSlug || f.slug === "index") return f;
-    const idx = orderedSlugs.indexOf(f.slug);
-    return idx !== -1 ? { ...f, topicOrder: idx + 1 } : f;
-  });
-}
-
 // ─── Route component ──────────────────────────────────────────────────────────
 
 function RoadmapEditor() {
@@ -105,7 +78,12 @@ function RoadmapEditor() {
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
   const contentListQueryKey = trpc.content.list.queryKey();
 
-  const reorderMutation = useMutation(trpc.content.reorder.mutationOptions());
+  const reorderMutation = useMutation({
+    ...trpc.content.reorder.mutationOptions(),
+    onError: (err) => toast.error(`Reorder failed: ${err.message}`),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: contentListQueryKey }),
+  });
   const createTrackMutation = useMutation(trpc.content.createTrack.mutationOptions());
   const createTopicMutation = useMutation(trpc.content.create.mutationOptions());
 
@@ -135,7 +113,7 @@ function RoadmapEditor() {
     setActiveTrackId(String(event.active.id));
   };
 
-  const handleTrackDragEnd = async (event: DragEndEvent) => {
+  const handleTrackDragEnd = (event: DragEndEvent) => {
     setActiveTrackId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -145,30 +123,18 @@ function RoadmapEditor() {
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = arrayMove(tracks, oldIndex, newIndex);
-    const orderedTracks = reordered.map((t) => t.slug);
     const items = reordered.flatMap((track, i) =>
-      track.topics.map((topic) => ({ slug: topic.slug, track: track.slug, trackOrder: i + 1 })),
+      track.topics.map((topic) => ({
+        slug: topic.slug,
+        track: track.slug,
+        trackOrder: i + 1,
+      })),
     );
 
-    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
-    const previous = queryClient.getQueryData<ContentList>(contentListQueryKey);
-    queryClient.setQueryData<ContentList>(contentListQueryKey, (groups) =>
-      groups ? updateRoadmapFiles(groups, roadmap, (files) => reorderTracks(files, orderedTracks)) : groups,
-    );
-
-    reorderMutation.mutate(
-      { roadmap, items },
-      {
-        onError: (err) => {
-          if (previous) queryClient.setQueryData(contentListQueryKey, previous);
-          toast.error(`Reorder failed: ${err.message}`);
-        },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: contentListQueryKey }),
-      },
-    );
+    reorderMutation.mutate({ roadmap, items });
   };
 
-  const handleTopicDragEnd = async (track: RoadmapTrack, event: DragEndEvent) => {
+  const handleTopicDragEnd = (track: RoadmapTrack, event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -177,27 +143,13 @@ function RoadmapEditor() {
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = arrayMove(track.topics, oldIndex, newIndex);
-    const orderedSlugs = reordered.map((t) => t.slug);
-    const items = reordered.map((topic, i) => ({ slug: topic.slug, track: track.slug, topicOrder: i + 1 }));
+    const items = reordered.map((topic, i) => ({
+      slug: topic.slug,
+      track: track.slug,
+      topicOrder: i + 1,
+    }));
 
-    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
-    const previous = queryClient.getQueryData<ContentList>(contentListQueryKey);
-    queryClient.setQueryData<ContentList>(contentListQueryKey, (groups) =>
-      groups
-        ? updateRoadmapFiles(groups, roadmap, (files) => reorderTrackFiles(files, track.slug, orderedSlugs))
-        : groups,
-    );
-
-    reorderMutation.mutate(
-      { roadmap, items },
-      {
-        onError: (err) => {
-          if (previous) queryClient.setQueryData(contentListQueryKey, previous);
-          toast.error(`Reorder failed: ${err.message}`);
-        },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: contentListQueryKey }),
-      },
-    );
+    reorderMutation.mutate({ roadmap, items });
   };
 
   const handleCreateTrack = (title: string) => {

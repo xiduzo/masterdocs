@@ -3,7 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
+import {
+  updateContentFile,
+  type ContentList,
+} from "@masterdocs/api/lib/content-list-cache";
 
+import { useOptimisticListMutation } from "@/hooks/use-optimistic-list-mutation";
 import { trpc } from "@/utils/trpc";
 
 interface ContentEditorProps {
@@ -44,10 +49,6 @@ export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEd
     enabled: !!prNumber,
   });
 
-  const submitMutation = useMutation(trpc.content.submit.mutationOptions());
-  const publishMutation = useMutation(trpc.content.publish.mutationOptions());
-  const discardMutation = useMutation(trpc.content.discard.mutationOptions());
-
   const contentListQueryKey = trpc.content.list.queryKey();
 
   const invalidateAll = () => {
@@ -57,74 +58,58 @@ export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEd
     queryClient.invalidateQueries({ queryKey: trpc.content.checkConflict.queryKey() });
   };
 
-  const handleSubmit = async () => {
+  const submitMutation = useOptimisticListMutation({
+    ...trpc.content.submit.mutationOptions(),
+    queryKey: contentListQueryKey,
+    optimistic: (groups: ContentList | undefined, input) =>
+      updateContentFile(
+        groups,
+        { roadmap: input.roadmap, slug: input.slug, track: input.track },
+        (f) => ({
+          ...f,
+          state: "pending_review" as const,
+          title: input.frontmatter.title,
+        }),
+      ),
+    onSuccess: (result) => {
+      toast.success(result.isNew ? "Submitted for review" : "Submission updated");
+    },
+    onError: (err) => {
+      toast.error(`Submit failed: ${err.message}`);
+    },
+    onSettled: invalidateAll,
+  });
+
+  const publishMutation = useOptimisticListMutation({
+    ...trpc.content.publish.mutationOptions(),
+    queryKey: contentListQueryKey,
+    optimistic: (groups: ContentList | undefined) =>
+      updateContentFile(groups, { roadmap, slug, track }, (f) => ({
+        ...f,
+        state: "published" as const,
+      })),
+    onSuccess: () => toast.success("Published successfully"),
+    onError: (err) => toast.error(`Publish failed: ${err.message}`),
+    onSettled: invalidateAll,
+  });
+
+  const discardMutation = useMutation(trpc.content.discard.mutationOptions());
+
+  const handleSubmit = () => {
     if (!frontmatter || body === null) return;
-
-    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
-    const previousList = queryClient.getQueryData(contentListQueryKey);
-    queryClient.setQueryData(contentListQueryKey, (groups) => {
-      if (!groups) return groups;
-      return groups.map((g) =>
-        g.roadmap === roadmap
-          ? {
-              ...g,
-              files: g.files.map((f) =>
-                f.slug === slug && f.track === track
-                  ? { ...f, state: "pending_review" as const, title: frontmatter.title }
-                  : f,
-              ),
-            }
-          : g,
-      );
+    submitMutation.mutate({
+      roadmap,
+      track,
+      slug,
+      frontmatter,
+      body,
+      fileSha: data?.fileSha,
     });
-
-    submitMutation.mutate(
-      { roadmap, track, slug, frontmatter, body, fileSha: data?.fileSha },
-      {
-        onSuccess: (result) => {
-          toast.success(result.isNew ? "Submitted for review" : "Submission updated");
-        },
-        onError: (err) => {
-          queryClient.setQueryData(contentListQueryKey, previousList);
-          toast.error(`Submit failed: ${err.message}`);
-        },
-        onSettled: () => invalidateAll(),
-      },
-    );
   };
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     if (!prNumber) return;
-
-    await queryClient.cancelQueries({ queryKey: contentListQueryKey });
-    const previousList = queryClient.getQueryData(contentListQueryKey);
-    queryClient.setQueryData(contentListQueryKey, (groups) => {
-      if (!groups) return groups;
-      return groups.map((g) =>
-        g.roadmap === roadmap
-          ? {
-              ...g,
-              files: g.files.map((f) =>
-                f.slug === slug && f.track === track
-                  ? { ...f, state: "published" as const }
-                  : f,
-              ),
-            }
-          : g,
-      );
-    });
-
-    publishMutation.mutate(
-      { prNumber },
-      {
-        onSuccess: () => toast.success("Published successfully"),
-        onError: (err) => {
-          queryClient.setQueryData(contentListQueryKey, previousList);
-          toast.error(`Publish failed: ${err.message}`);
-        },
-        onSettled: () => invalidateAll(),
-      },
-    );
+    publishMutation.mutate({ prNumber });
   };
 
   const handleDiscard = () => {
