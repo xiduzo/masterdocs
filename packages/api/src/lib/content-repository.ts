@@ -88,6 +88,38 @@ export interface ContentRepository {
     frontmatter: MdxFrontmatter;
     body: string;
   }): Promise<void>;
+
+  /**
+   * Create a brand-new Roadmap — scaffolds the directory, metadata
+   * mdx, index mdx, meta.json, and patches the root meta.json. Auto-
+   * merges so the Roadmap appears immediately. Throws
+   * ContentAlreadyExistsError if a Roadmap with this slug exists.
+   */
+  createRoadmap(params: {
+    slug: string;
+    title: string;
+    description?: string;
+  }): Promise<SubmissionRef>;
+
+  /**
+   * Create a new Track inside an existing Roadmap — scaffolds the
+   * track directory with an index.mdx + meta.json and patches the
+   * Roadmap's meta.json. Auto-merges. Throws ContentAlreadyExistsError
+   * if the Track exists.
+   */
+  createTrack(params: {
+    roadmap: string;
+    trackSlug: string;
+    trackTitle: string;
+  }): Promise<SubmissionRef>;
+
+  /**
+   * Create a new Topic inside a Track — opens a Submission containing
+   * the new file with default frontmatter; **does not** auto-merge.
+   * The Topic is in `pending_review` state until publish. Throws
+   * ContentAlreadyExistsError if the Topic exists on main.
+   */
+  createTopic(coords: ContentCoords): Promise<SubmissionRef>;
 }
 
 export interface ConflictStatus {
@@ -108,5 +140,17 @@ export class ContentMergeConflictError extends Error {
   readonly name = "ContentMergeConflictError";
   constructor() {
     super("Merge conflict detected");
+  }
+}
+
+/**
+ * Tagged error raised by create* verbs when the target resource (Roadmap,
+ * Track, or Topic) already exists. The tRPC router surfaces this as a
+ * `TRPCError({ code: "CONFLICT" })`.
+ */
+export class ContentAlreadyExistsError extends Error {
+  readonly name = "ContentAlreadyExistsError";
+  constructor(message: string) {
+    super(message);
   }
 }

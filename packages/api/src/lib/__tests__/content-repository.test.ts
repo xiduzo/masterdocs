@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { ContentMergeConflictError } from "../content-repository";
+import {
+  ContentAlreadyExistsError,
+  ContentMergeConflictError,
+} from "../content-repository";
 import { FakeContentRepository } from "../fake-content-repository";
 
 let repo: FakeContentRepository;
@@ -168,5 +171,85 @@ describe("submitMergedContent", () => {
       body: "body",
     });
     expect(repo.pendingPRs()).toHaveLength(1);
+  });
+});
+
+describe("createRoadmap", () => {
+  test("scaffolds index, meta.json, and roadmap metadata directly on main", async () => {
+    const ref = await repo.createRoadmap({
+      slug: "figma",
+      title: "Figma",
+      description: "Design tool",
+    });
+    expect(ref.prNumber).toBeGreaterThan(0);
+    const paths = repo.mainFiles().map((f) => f.path);
+    expect(paths).toContain("apps/fumadocs/content/docs/figma/index.mdx");
+    expect(paths).toContain("apps/fumadocs/content/docs/figma/meta.json");
+    expect(paths).toContain("apps/fumadocs/content/roadmaps/figma.mdx");
+  });
+
+  test("raises ContentAlreadyExistsError when the Roadmap exists", async () => {
+    await repo.createRoadmap({ slug: "figma", title: "Figma" });
+    await expect(
+      repo.createRoadmap({ slug: "figma", title: "Figma" }),
+    ).rejects.toBeInstanceOf(ContentAlreadyExistsError);
+  });
+});
+
+describe("createTrack", () => {
+  test("scaffolds track index and meta.json directly on main", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    const paths = repo.mainFiles().map((f) => f.path);
+    expect(paths).toContain(
+      "apps/fumadocs/content/docs/arduino/sensors/index.mdx",
+    );
+    expect(paths).toContain(
+      "apps/fumadocs/content/docs/arduino/sensors/meta.json",
+    );
+  });
+
+  test("raises ContentAlreadyExistsError when the Track exists", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    await expect(
+      repo.createTrack({
+        roadmap: "arduino",
+        trackSlug: "sensors",
+        trackTitle: "Sensors",
+      }),
+    ).rejects.toBeInstanceOf(ContentAlreadyExistsError);
+  });
+});
+
+describe("createTopic", () => {
+  test("opens a Submission with default frontmatter; nothing on main", async () => {
+    const ref = await repo.createTopic({
+      roadmap: "arduino",
+      slug: "temperature",
+      track: "sensors",
+    });
+    expect(ref.prNumber).toBeGreaterThan(0);
+    expect(repo.pendingPRs()).toHaveLength(1);
+    expect(repo.pendingPRs()[0]!.file.content).toContain("Temperature");
+    expect(repo.mainFiles()).toHaveLength(0);
+  });
+
+  test("raises ContentAlreadyExistsError when the Topic exists on main", async () => {
+    repo.seedMainFile(
+      { roadmap: "arduino", slug: "temperature", track: "sensors" },
+      "existing",
+    );
+    await expect(
+      repo.createTopic({ roadmap: "arduino", slug: "temperature", track: "sensors" }),
+    ).rejects.toBeInstanceOf(ContentAlreadyExistsError);
   });
 });

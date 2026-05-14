@@ -4,8 +4,9 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../index";
 import type { GitHubService } from "../lib/github";
 import { getCachedGitHubService } from "../lib/github-cache";
-import { type MdxFrontmatter, isValidSlug, parseMdx, serializeMdx } from "../lib/mdx";
+import { isValidSlug, parseMdx } from "../lib/mdx";
 import {
+  ContentAlreadyExistsError,
   ContentMergeConflictError,
   getContentRepository,
 } from "../lib/octokit-content-repository";
@@ -35,33 +36,6 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   }
   return next({ ctx });
 });
-
-/**
- * Ensure a roadmap directory has an index.mdx on the given branch.
- * Creates one if missing. Returns true if the file was created.
- */
-async function ensureRoadmapIndex(
-  github: GitHubService,
-  roadmapSlug: string,
-  title: string,
-  branch: string,
-) {
-  const indexPath = `apps/fumadocs/content/docs/${roadmapSlug}/index.mdx`;
-  try {
-    await github.getFileContent(indexPath, branch);
-    return false; // already exists
-  } catch (err) {
-    if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
-  }
-  const indexMdx = serializeMdx({ title }, "");
-  await github.createOrUpdateFile({
-    path: indexPath,
-    content: indexMdx,
-    message: `Create index page for ${title}`,
-    branch,
-  });
-  return true;
-}
 
 /** Build the full file path for a content file. */
 function contentFilePath(roadmap: string, slug: string, track?: string) {
@@ -401,81 +375,24 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      // 1. Validate slug
       if (!isValidSlug(input.slug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Slug must contain only lowercase letters, numbers, and hyphens",
         });
       }
-
-      const github = getCachedGitHubService();
-
-      // 2. Build file path (nested under track directory)
-      const filePath = contentFilePath(input.roadmap, input.slug, input.track);
-
-      // 3. Check if file already exists on main
       try {
-        await github.getFileContent(filePath);
-        throw new TRPCError({ code: "CONFLICT", message: "File already exists" });
+        return await getContentRepository().createTopic({
+          roadmap: input.roadmap,
+          slug: input.slug,
+          track: input.track,
+        });
       } catch (err) {
-        if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
-        if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
-      }
-
-      // 4. Create default frontmatter
-      const defaultFrontmatter: MdxFrontmatter = {
-        title: input.slug
-          .replace(/-/g, " ")
-          .replace(/\b\w/g, (c) => c.toUpperCase()),
-      };
-
-      // 5. Use the deterministic branch name so submit/get can locate this PR later
-      const branchName = contentBranchName(input.roadmap, input.slug, input.track);
-      // Clean up any stale abandoned branch
-      if (await github.branchExists(branchName)) {
-        await github.deleteBranch(branchName);
-      }
-      const mainSha = await github.getMainHeadSha();
-      await github.createBranch(branchName, mainSha);
-
-      // Ensure the roadmap has an index page
-      await ensureRoadmapIndex(github, input.roadmap, input.roadmap, branchName);
-
-      await github.createOrUpdateFile({
-        path: filePath,
-        content: serializeMdx(defaultFrontmatter, ""),
-        message: `Create new content: ${defaultFrontmatter.title}`,
-        branch: branchName,
-      });
-
-      // Update the track's meta.json to include the new page
-      const metaPath = `apps/fumadocs/content/docs/${input.roadmap}/${input.track}/meta.json`;
-      try {
-        const { content: metaRaw, sha: metaSha } = await github.getFileContent(metaPath, branchName);
-        const meta = JSON.parse(metaRaw);
-        if (Array.isArray(meta.pages) && !meta.pages.includes(input.slug)) {
-          meta.pages.push(input.slug);
-          await github.createOrUpdateFile({
-            path: metaPath,
-            content: JSON.stringify(meta, null, 2) + "\n",
-            message: `Add ${input.slug} to ${input.track}/meta.json`,
-            branch: branchName,
-            sha: metaSha,
-          });
+        if (err instanceof ContentAlreadyExistsError) {
+          throw new TRPCError({ code: "CONFLICT", message: err.message });
         }
-      } catch {
-        // If meta.json doesn't exist or can't be read, skip
+        throw err;
       }
-
-      const pr = await github.createPullRequest({
-        title: `New content: ${defaultFrontmatter.title}`,
-        body: `Created new content file: ${filePath}`,
-        head: branchName,
-        base: "main",
-      });
-
-      return { prNumber: pr.number, branchName };
     }),
 
   publish: adminProcedure
@@ -555,113 +472,17 @@ export const contentRouter = router({
           message: "Slug must contain only lowercase letters, numbers, and hyphens",
         });
       }
-
-      const github = getCachedGitHubService();
-      const contentBase = "apps/fumadocs/content/docs";
-
-      // Check if the roadmap directory already exists
       try {
-        await github.getDirectoryTree(`${contentBase}/${input.slug}`);
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Roadmap already exists",
-        });
+        return await getContentRepository().createRoadmap(input);
       } catch (err) {
-        if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
-        // "not found" is expected — continue
-        if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
-      }
-
-      const branchName = `content/roadmap-${input.slug}-${Date.now()}`;
-      const mainSha = await github.getMainHeadSha();
-      await github.createBranch(branchName, mainSha);
-
-      // 1. content/roadmaps/{slug}.mdx — roadmap metadata
-      const roadmapMdx = serializeMdx(
-        { title: input.title, description: input.description },
-        "",
-      );
-      await github.createOrUpdateFile({
-        path: `apps/fumadocs/content/roadmaps/${input.slug}.mdx`,
-        content: roadmapMdx,
-        message: `Create roadmap metadata: ${input.title}`,
-        branch: branchName,
-      });
-
-      // 2. content/docs/{slug}/index.mdx — landing page
-      const indexMdx = serializeMdx(
-        { title: input.title, description: input.description },
-        "",
-      );
-      await github.createOrUpdateFile({
-        path: `${contentBase}/${input.slug}/index.mdx`,
-        content: indexMdx,
-        message: `Create roadmap index: ${input.title}`,
-        branch: branchName,
-      });
-
-      // 3. content/docs/{slug}/meta.json — page ordering
-      const metaJson = JSON.stringify(
-        { title: input.title, pages: ["index", "...rest"] },
-        null,
-        2,
-      ) + "\n";
-      await github.createOrUpdateFile({
-        path: `${contentBase}/${input.slug}/meta.json`,
-        content: metaJson,
-        message: `Create roadmap meta.json: ${input.title}`,
-        branch: branchName,
-      });
-
-      // 4. Update root meta.json to include the new roadmap in the sidebar
-      try {
-        const { content: rootMetaRaw, sha: rootMetaSha } = await github.getFileContent(
-          `${contentBase}/meta.json`,
-          branchName,
-        );
-        const rootMeta = JSON.parse(rootMetaRaw);
-        if (Array.isArray(rootMeta.pages) && !rootMeta.pages.includes(input.slug)) {
-          rootMeta.pages.push(input.slug);
-          await github.createOrUpdateFile({
-            path: `${contentBase}/meta.json`,
-            content: JSON.stringify(rootMeta, null, 2) + "\n",
-            message: `Add ${input.slug} to root meta.json`,
-            branch: branchName,
-            sha: rootMetaSha,
-          });
+        if (err instanceof ContentAlreadyExistsError) {
+          throw new TRPCError({ code: "CONFLICT", message: err.message });
         }
-      } catch {
-        // If root meta.json doesn't exist or can't be read, skip
+        throw err;
       }
-
-      // 4. PR + auto-merge so the roadmap scaffold appears immediately
-      const pr = await github.createPullRequest({
-        title: `New roadmap: ${input.title}`,
-        body: `Created new roadmap: ${input.slug}`,
-        head: branchName,
-        base: "main",
-      });
-
-      try {
-        await github.mergePullRequest(pr.number, "merge");
-        await github.deleteBranch(branchName);
-        // Auto-merge landed a new roadmap directory on main — evict any stale
-        // reads that predate it.
-        github.invalidate.prefix(`${contentBase}/${input.slug}`, "main");
-        github.invalidate.file(`${contentBase}/meta.json`, "main");
-        github.invalidate.file(
-          `apps/fumadocs/content/roadmaps/${input.slug}.mdx`,
-          "main",
-        );
-        github.invalidate.tree(contentBase, "main");
-      } catch {
-        // If auto-merge fails (e.g. branch protection), leave PR open
-      }
-
-      return { prNumber: pr.number, branchName };
     }),
 
-  /** Create a new track (sub-section) inside a roadmap by creating its first topic file. */
+  /** Create a new track (sub-section) inside a roadmap. */
   createTrack: adminProcedure
     .input(
       z.object({
@@ -671,103 +492,20 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const trackSlug = input.trackSlug;
-
-      if (!isValidSlug(trackSlug)) {
+      if (!isValidSlug(input.trackSlug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Slug must contain only lowercase letters, numbers, and hyphens",
         });
       }
-
-      const github = getCachedGitHubService();
-      const contentBase = "apps/fumadocs/content/docs";
-      const trackDir = `${contentBase}/${input.roadmap}/${trackSlug}`;
-
-      // Check the track directory doesn't already exist
       try {
-        await github.getDirectoryTree(trackDir);
-        throw new TRPCError({ code: "CONFLICT", message: "Track already exists" });
+        return await getContentRepository().createTrack(input);
       } catch (err) {
-        if (err instanceof TRPCError && err.code === "CONFLICT") throw err;
-        if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
-      }
-
-      const branchName = `content/${trackSlug}-${Date.now()}`;
-      const mainSha = await github.getMainHeadSha();
-      await github.createBranch(branchName, mainSha);
-
-      // Ensure the roadmap has an index page
-      await ensureRoadmapIndex(github, input.roadmap, input.roadmap, branchName);
-
-      // 1. Create track index.mdx
-      const trackTitle = input.trackTitle
-        .split(" ")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-      const indexMdx = serializeMdx({ title: trackTitle, description: "" }, "");
-      await github.createOrUpdateFile({
-        path: `${trackDir}/index.mdx`,
-        content: indexMdx,
-        message: `Create track index: ${trackTitle}`,
-        branch: branchName,
-      });
-
-      // 2. Create track meta.json
-      const trackMeta = JSON.stringify(
-        { title: trackTitle, pages: ["index"] },
-        null,
-        2,
-      ) + "\n";
-      await github.createOrUpdateFile({
-        path: `${trackDir}/meta.json`,
-        content: trackMeta,
-        message: `Create track meta.json: ${trackTitle}`,
-        branch: branchName,
-      });
-
-      // 3. Update the roadmap's meta.json to include the new track folder
-      const roadmapMetaPath = `${contentBase}/${input.roadmap}/meta.json`;
-      try {
-        const { content: metaRaw, sha: metaSha } = await github.getFileContent(
-          roadmapMetaPath,
-          branchName,
-        );
-        const meta = JSON.parse(metaRaw);
-        if (Array.isArray(meta.pages) && !meta.pages.includes(trackSlug)) {
-          meta.pages.push(trackSlug);
-          await github.createOrUpdateFile({
-            path: roadmapMetaPath,
-            content: JSON.stringify(meta, null, 2) + "\n",
-            message: `Add ${trackSlug} to roadmap meta.json`,
-            branch: branchName,
-            sha: metaSha,
-          });
+        if (err instanceof ContentAlreadyExistsError) {
+          throw new TRPCError({ code: "CONFLICT", message: err.message });
         }
-      } catch {
-        // If meta.json doesn't exist or can't be read, skip
+        throw err;
       }
-
-      const pr = await github.createPullRequest({
-        title: `New track: ${trackTitle}`,
-        body: `Created new track in ${input.roadmap}: ${trackTitle}`,
-        head: branchName,
-        base: "main",
-      });
-
-      try {
-        await github.mergePullRequest(pr.number, "merge");
-        await github.deleteBranch(branchName);
-        // Auto-merge landed a new track directory on main — evict stale
-        // tree/meta reads that don't know about it yet.
-        github.invalidate.prefix(trackDir, "main");
-        github.invalidate.file(`${contentBase}/${input.roadmap}/meta.json`, "main");
-        github.invalidate.tree(`${contentBase}/${input.roadmap}`, "main");
-      } catch {
-        // If auto-merge fails (e.g. branch protection), leave PR open
-      }
-
-      return { prNumber: pr.number, branchName };
     }),
 
   deleteFile: adminProcedure

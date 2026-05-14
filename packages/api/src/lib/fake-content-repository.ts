@@ -11,10 +11,12 @@
 import { contentBranchName, contentFilePath } from "./content-paths";
 import { serializeMdx } from "./mdx";
 import {
+  ContentAlreadyExistsError,
   ContentMergeConflictError,
   type ConflictStatus,
   type ContentCoords,
   type ContentRepository,
+  type SubmissionRef,
   type SubmitTopicEditResult,
 } from "./content-repository";
 
@@ -158,6 +160,120 @@ export class FakeContentRepository implements ContentRepository {
     if (!pr) throw new Error(`No such PR: ${prNumber}`);
     pr.file.content = serializeMdx(frontmatter, body);
     pr.file.sha = this.fakeSha();
+  }
+
+  async createRoadmap({
+    slug,
+    title,
+    description,
+  }: Parameters<ContentRepository["createRoadmap"]>[0]): Promise<SubmissionRef> {
+    if (this.roadmapExistsOnMain(slug)) {
+      throw new ContentAlreadyExistsError(`Roadmap "${slug}" already exists`);
+    }
+    const branchName = `content/roadmap-${slug}-${this.nextPrNumber}`;
+    const baseFm = { title, ...(description !== undefined ? { description } : {}) };
+
+    // Auto-merge: write the scaffold straight to main.
+    const indexPath = `apps/fumadocs/content/docs/${slug}/index.mdx`;
+    const metaPath = `apps/fumadocs/content/docs/${slug}/meta.json`;
+    const roadmapMdxPath = `apps/fumadocs/content/roadmaps/${slug}.mdx`;
+
+    this.main.set(roadmapMdxPath, {
+      path: roadmapMdxPath,
+      content: serializeMdx(baseFm, ""),
+      sha: this.fakeSha(),
+    });
+    this.main.set(indexPath, {
+      path: indexPath,
+      content: serializeMdx(baseFm, ""),
+      sha: this.fakeSha(),
+    });
+    this.main.set(metaPath, {
+      path: metaPath,
+      content: JSON.stringify({ title, pages: ["index", "...rest"] }, null, 2) + "\n",
+      sha: this.fakeSha(),
+    });
+
+    const prNumber = this.nextPrNumber++;
+    return { prNumber, branchName };
+  }
+
+  async createTrack({
+    roadmap,
+    trackSlug,
+    trackTitle,
+  }: Parameters<ContentRepository["createTrack"]>[0]): Promise<SubmissionRef> {
+    if (this.trackExistsOnMain(roadmap, trackSlug)) {
+      throw new ContentAlreadyExistsError(`Track "${trackSlug}" already exists`);
+    }
+    const branchName = `content/${trackSlug}-${this.nextPrNumber}`;
+    const indexPath = `apps/fumadocs/content/docs/${roadmap}/${trackSlug}/index.mdx`;
+    const metaPath = `apps/fumadocs/content/docs/${roadmap}/${trackSlug}/meta.json`;
+
+    this.main.set(indexPath, {
+      path: indexPath,
+      content: serializeMdx({ title: trackTitle, description: "" }, ""),
+      sha: this.fakeSha(),
+    });
+    this.main.set(metaPath, {
+      path: metaPath,
+      content: JSON.stringify({ title: trackTitle, pages: ["index"] }, null, 2) + "\n",
+      sha: this.fakeSha(),
+    });
+
+    const prNumber = this.nextPrNumber++;
+    return { prNumber, branchName };
+  }
+
+  async createTopic(coords: ContentCoords): Promise<SubmissionRef> {
+    const filePath = contentFilePath(coords);
+    if (this.main.has(filePath)) {
+      throw new ContentAlreadyExistsError(`Topic "${coords.slug}" already exists`);
+    }
+
+    const branchName = contentBranchName(coords);
+    const defaultFrontmatter = {
+      title: coords.slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    };
+
+    // Existing pending PR on this branch is rare here (caller checks main),
+    // but mirror the production adapter's clean-up.
+    if (this.prsByBranch.has(branchName)) {
+      const existing = this.prsByBranch.get(branchName)!;
+      this.prs.delete(existing.prNumber);
+      this.prsByBranch.delete(existing.branchName);
+    }
+
+    const pr: PendingPR = {
+      prNumber: this.nextPrNumber++,
+      branchName,
+      file: {
+        path: filePath,
+        content: serializeMdx(defaultFrontmatter, ""),
+        sha: this.fakeSha(),
+      },
+    };
+    this.prs.set(pr.prNumber, pr);
+    this.prsByBranch.set(pr.branchName, pr);
+    this.prBaseSha.set(pr.prNumber, this.currentMainSha);
+    this.prMainModifiedFiles.set(pr.prNumber, new Set());
+    return { prNumber: pr.prNumber, branchName: pr.branchName };
+  }
+
+  private roadmapExistsOnMain(slug: string): boolean {
+    const prefix = `apps/fumadocs/content/docs/${slug}/`;
+    for (const path of this.main.keys()) {
+      if (path.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  private trackExistsOnMain(roadmap: string, trackSlug: string): boolean {
+    const prefix = `apps/fumadocs/content/docs/${roadmap}/${trackSlug}/`;
+    for (const path of this.main.keys()) {
+      if (path.startsWith(prefix)) return true;
+    }
+    return false;
   }
 
   // ── Test helpers ─────────────────────────────────────────────────────────
