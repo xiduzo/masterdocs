@@ -78,6 +78,19 @@ export interface GitHubService {
 // Error handling helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Thrown by every `GitHubService` read when the underlying GitHub API
+ * returns a 404. Callers can `instanceof`-check instead of string-matching
+ * `err.message`.
+ */
+export class GitHubNotFoundError extends Error {
+  readonly name = "GitHubNotFoundError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+
 function isRateLimited(status: number, headers: Record<string, unknown>): boolean {
   if (status === 429) return true;
   if (status === 403 && headers["x-ratelimit-remaining"] === "0") return true;
@@ -109,7 +122,7 @@ function wrapOctokitError(err: unknown): never {
       case 403:
         throw new Error("GitHub token lacks required permissions");
       case 404:
-        throw new Error(`GitHub resource not found: ${err.message}`);
+        throw new GitHubNotFoundError(`GitHub resource not found: ${err.message}`);
       case 409:
         throw new Error(`GitHub conflict: ${err.message}`);
       case 422:

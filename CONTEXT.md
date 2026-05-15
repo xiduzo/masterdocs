@@ -18,10 +18,13 @@ The Roadmap → Track → Topic hierarchy is derived from filesystem path and `m
 
 The admin editor in `apps/web` proposes Topic edits via GitHub pull requests against the `main` branch.
 
-- **Submission** — An admin's proposed edit to a Topic. Creates a deterministic branch named `content/<roadmap>/<track>/<topic>` and opens a PR. The Topic is then in `state: "pending_review"`.
-- **Publication** — Merging the submission PR. The Topic transitions to `state: "published"`.
-- **Discard** — Closing the submission PR and deleting the branch. The Topic returns to its published state.
-- **Conflict** — `main` has advanced and modified the same Topic file while a submission was open. Resolved via one of three explicit verbs: `keepMineOnConflict`, `useMainOnConflict`, or `submitMergedContent`.
+- **Submission** — A pending change to content, backed by a PR + branch. Two flavours:
+  - **Topic-edit Submission** — opened by `submitTopicEdit` against a single Topic. Branch name is *deterministic* (`content/<roadmap>/[<track>/]<topic>` via `contentBranchName`), so re-submitting the same Topic coalesces onto the existing PR. The Topic is then in `state: "pending_review"` until published or discarded.
+  - **Scaffold Submission** — opened by `createRoadmap` / `createTrack`. Branch name is *timestamped* (`content/<slug>-<ms>`) — every call opens a fresh Submission. Auto-merged on creation; only persists if auto-merge fails.
+  - `createTopic` is a hybrid: deterministic branch like a Topic-edit Submission, but no auto-merge — it stays `pending_review`.
+- **Publication** — Merging a Submission's PR. For Topic-edit Submissions the Topic transitions to `state: "published"`; for Scaffold Submissions the new Roadmap/Track appears on `main`.
+- **Discard** — Closing the Submission's PR and deleting the branch. Returns the content to its prior state.
+- **Conflict** — `main` has advanced and modified the same Topic file while a Topic-edit Submission was open. Resolved via one of three explicit verbs: `keepMineOnConflict`, `useMainOnConflict`, or `submitMergedContent`.
 
 Operations that don't carry editorial risk (reorder, delete) write directly to `main` without a PR.
 

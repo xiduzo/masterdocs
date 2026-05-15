@@ -14,11 +14,12 @@ import {
   filePathFromBranch,
   type ContentCoords,
 } from "./content-paths";
+import { orderByMetaPages } from "./meta-pages-order";
 import {
   type CachedGitHubService,
   getCachedGitHubService,
 } from "./github-cache";
-import type { GitHubService } from "./github";
+import { GitHubNotFoundError, type GitHubService } from "./github";
 import { parseMdx, serializeMdx } from "./mdx";
 import {
   ContentAlreadyExistsError,
@@ -55,7 +56,7 @@ async function ensureRoadmapIndex(
     await github.getFileContent(indexPath, branch);
     return;
   } catch (err) {
-    if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+    if (!(err instanceof GitHubNotFoundError)) throw err;
   }
   const indexMdx = serializeMdx({ title }, "");
   await github.createOrUpdateFile({
@@ -146,6 +147,77 @@ async function patchMetaRemovePage(
 class OctokitContentRepository implements ContentRepository {
   constructor(private readonly github: CachedGitHubService) {}
 
+  /**
+   * Open a new Submission — discard any stale branch (if requested),
+   * branch from main HEAD, run the caller's `writes`, and open a PR.
+   * Returns the resulting SubmissionRef. Used by every verb that
+   * authors content via PR (`submitTopicEdit`'s new-PR path, the
+   * scaffold create verbs, and `createTopic`).
+   */
+  private async openSubmission(params: {
+    branchName: string;
+    prTitle: string;
+    prBody: string;
+    /** Delete an existing branch with this name first. Needed when the
+     *  branch name is deterministic (Topic-edit / createTopic). */
+    discardStale?: boolean;
+    writes: (branch: string) => Promise<void>;
+  }): Promise<SubmissionRef> {
+    const { branchName, prTitle, prBody, discardStale, writes } = params;
+    if (discardStale && (await this.github.branchExists(branchName))) {
+      await this.github.deleteBranch(branchName);
+    }
+    const mainSha = await this.github.getMainHeadSha();
+    await this.github.createBranch(branchName, mainSha);
+    await writes(branchName);
+    const pr = await this.github.createPullRequest({
+      title: prTitle,
+      body: prBody,
+      head: branchName,
+      base: "main",
+    });
+    return { prNumber: pr.number, branchName };
+  }
+
+  /**
+   * Publish a Submission — merge its PR into main, delete its branch,
+   * and evict any cache entries the caller declares affected.
+   *
+   * Merge-conflict failures are translated to `ContentMergeConflictError`
+   * so the tRPC layer can surface them as `CONFLICT`. Callers on the
+   * scaffold path (auto-merge that may be blocked by branch protection)
+   * pass `tolerateFailure: true` to swallow any failure and leave the
+   * Submission open.
+   */
+  private async publishSubmission(params: {
+    ref: SubmissionRef;
+    invalidate?: {
+      prefixes?: readonly string[];
+      files?: readonly string[];
+      trees?: readonly string[];
+    };
+    tolerateFailure?: boolean;
+  }): Promise<void> {
+    const { ref, invalidate, tolerateFailure } = params;
+    try {
+      try {
+        await this.github.mergePullRequest(ref.prNumber, "merge");
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("conflict")) {
+          throw new ContentMergeConflictError();
+        }
+        throw err;
+      }
+      await this.github.deleteBranch(ref.branchName);
+      for (const p of invalidate?.prefixes ?? []) this.github.invalidate.prefix(p, "main");
+      for (const f of invalidate?.files ?? []) this.github.invalidate.file(f, "main");
+      for (const t of invalidate?.trees ?? []) this.github.invalidate.tree(t, "main");
+    } catch (err) {
+      if (tolerateFailure) return;
+      throw err;
+    }
+  }
+
   async listContent(): Promise<ContentListGroupRow[]> {
     const topLevel = await this.github.getDirectoryTree(CONTENT_DOCS_BASE);
     const roadmapDirs = topLevel.filter((e) => e.type === "dir");
@@ -200,15 +272,11 @@ class OctokitContentRepository implements ContentRepository {
         const roadmapMeta = await readMeta(`${dir.path}/meta.json`);
         const roadmapPages = roadmapMeta?.pages ?? [];
 
-        const trackDirMap = new Map(
-          trackDirs.map((d) => [d.path.split("/").pop()!, d] as const),
+        const sortedTrackDirs = orderByMetaPages(
+          trackDirs,
+          roadmapPages,
+          (d) => d.path.split("/").pop()!,
         );
-        const sortedTrackDirs = [
-          ...roadmapPages
-            .filter((name) => trackDirMap.has(name))
-            .map((name) => trackDirMap.get(name)!),
-          ...trackDirs.filter((d) => !roadmapPages.includes(d.path.split("/").pop()!)),
-        ];
 
         const topLevelFiles = await Promise.all(
           roadmapMdxFiles.map(async (file) => {
@@ -228,18 +296,11 @@ class OctokitContentRepository implements ContentRepository {
             const trackMeta = await readMeta(`${trackDir.path}/meta.json`);
             const trackPages = trackMeta?.pages ?? [];
 
-            const fileMap = new Map(
-              trackMdxFiles.map(
-                (f) => [f.path.split("/").pop()!.replace(/\.mdx$/, ""), f] as const,
-              ),
+            const sortedMdxFiles = orderByMetaPages(
+              trackMdxFiles,
+              trackPages,
+              (f) => f.path.split("/").pop()!.replace(/\.mdx$/, ""),
             );
-
-            const sortedMdxFiles = [
-              ...trackPages.filter((name) => fileMap.has(name)).map((name) => fileMap.get(name)!),
-              ...trackMdxFiles.filter(
-                (f) => !trackPages.includes(f.path.split("/").pop()!.replace(/\.mdx$/, "")),
-              ),
-            ];
 
             return Promise.all(
               sortedMdxFiles.map(async (file) => {
@@ -331,12 +392,8 @@ class OctokitContentRepository implements ContentRepository {
       sha = file.sha;
       resolvedFromPendingBranch = !!branch;
     } catch (err) {
-      if (!pr || !(err instanceof Error) || !err.message.includes("not found")) {
-        if (err instanceof Error && err.message.includes("not found")) {
-          throw new ContentNotFoundError(`Topic not found: ${filePath}`);
-        }
-        throw err;
-      }
+      if (!(err instanceof GitHubNotFoundError)) throw err;
+      if (!pr) throw new ContentNotFoundError(`Topic not found: ${filePath}`);
       const fallback = await this.github.getFileContent(filePath);
       content = fallback.content;
       sha = fallback.sha;
@@ -414,52 +471,37 @@ class OctokitContentRepository implements ContentRepository {
       };
     }
 
-    // No open PR — clean up any stale branch (e.g. from a previous discard
-    // that left the branch behind) and start a fresh Submission.
-    if (await this.github.branchExists(branchName)) {
-      await this.github.deleteBranch(branchName);
-    }
-    const mainSha = await this.github.getMainHeadSha();
-    await this.github.createBranch(branchName, mainSha);
-    await this.github.createOrUpdateFile({
-      path: filePath,
-      content: mdxContent,
-      message: `Content update: ${frontmatter.title}`,
-      branch: branchName,
-      sha: fileSha,
+    // No open PR — open a fresh Submission, discarding any stale branch
+    // (e.g. from a previous discard that left the branch behind).
+    const ref = await this.openSubmission({
+      branchName,
+      prTitle: `Content update: ${frontmatter.title}`,
+      prBody: `Updated content file: ${filePath}`,
+      discardStale: true,
+      writes: async (branch) => {
+        await this.github.createOrUpdateFile({
+          path: filePath,
+          content: mdxContent,
+          message: `Content update: ${frontmatter.title}`,
+          branch,
+          sha: fileSha,
+        });
+      },
     });
-    const pr = await this.github.createPullRequest({
-      title: `Content update: ${frontmatter.title}`,
-      body: `Updated content file: ${filePath}`,
-      head: branchName,
-      base: "main",
-    });
-    return { prNumber: pr.number, branchName, isNew: true };
+    return { ...ref, isNew: true };
   }
 
   async publishTopic(prNumber: number): Promise<void> {
     const pr = await this.github.getPR(prNumber);
-
-    try {
-      await this.github.mergePullRequest(pr.prNumber, "merge");
-    } catch (err) {
-      if (err instanceof Error && err.message.toLowerCase().includes("conflict")) {
-        // Caller is expected to convert this into a domain-level
-        // ContentMergeConflict — for now, re-throw with a tag the
-        // tRPC layer recognises.
-        throw new ContentMergeConflictError();
-      }
-      throw err;
-    }
-
-    // The merged file now exists on main — evict stale main-branch reads
-    // for that file and the directory listing that contained it.
     const mergedFilePath = filePathFromBranch(pr.branchName);
-    this.github.invalidate.file(mergedFilePath, "main");
     const mergedParent = mergedFilePath.slice(0, mergedFilePath.lastIndexOf("/"));
-    this.github.invalidate.tree(mergedParent, "main");
-
-    await this.github.deleteBranch(pr.branchName);
+    await this.publishSubmission({
+      ref: { prNumber: pr.prNumber, branchName: pr.branchName },
+      invalidate: {
+        files: [mergedFilePath],
+        trees: [mergedParent],
+      },
+    });
   }
 
   async discardTopic(prNumber: number): Promise<void> {
@@ -536,63 +578,54 @@ class OctokitContentRepository implements ContentRepository {
       throw new ContentAlreadyExistsError(`Roadmap "${slug}" already exists`);
     } catch (err) {
       if (err instanceof ContentAlreadyExistsError) throw err;
-      if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+      if (!(err instanceof GitHubNotFoundError)) throw err;
     }
-
-    const branchName = `content/roadmap-${slug}-${Date.now()}`;
-    const mainSha = await this.github.getMainHeadSha();
-    await this.github.createBranch(branchName, mainSha);
 
     const baseFm = { title, ...(description !== undefined ? { description } : {}) };
-
-    await this.github.createOrUpdateFile({
-      path: `${ROADMAP_META_BASE}/${slug}.mdx`,
-      content: serializeMdx(baseFm, ""),
-      message: `Create roadmap metadata: ${title}`,
-      branch: branchName,
+    const ref = await this.openSubmission({
+      branchName: `content/roadmap-${slug}-${Date.now()}`,
+      prTitle: `New roadmap: ${title}`,
+      prBody: `Created new roadmap: ${slug}`,
+      writes: async (branch) => {
+        await this.github.createOrUpdateFile({
+          path: `${ROADMAP_META_BASE}/${slug}.mdx`,
+          content: serializeMdx(baseFm, ""),
+          message: `Create roadmap metadata: ${title}`,
+          branch,
+        });
+        await this.github.createOrUpdateFile({
+          path: `${roadmapDir}/index.mdx`,
+          content: serializeMdx(baseFm, ""),
+          message: `Create roadmap index: ${title}`,
+          branch,
+        });
+        await this.github.createOrUpdateFile({
+          path: `${roadmapDir}/meta.json`,
+          content: JSON.stringify({ title, pages: ["index", "...rest"] }, null, 2) + "\n",
+          message: `Create roadmap meta.json: ${title}`,
+          branch,
+        });
+        await patchMetaPages(
+          this.github,
+          `${CONTENT_DOCS_BASE}/meta.json`,
+          branch,
+          slug,
+          `Add ${slug} to root meta.json`,
+        );
+      },
     });
 
-    await this.github.createOrUpdateFile({
-      path: `${roadmapDir}/index.mdx`,
-      content: serializeMdx(baseFm, ""),
-      message: `Create roadmap index: ${title}`,
-      branch: branchName,
+    await this.publishSubmission({
+      ref,
+      tolerateFailure: true,
+      invalidate: {
+        prefixes: [roadmapDir],
+        files: [`${CONTENT_DOCS_BASE}/meta.json`, `${ROADMAP_META_BASE}/${slug}.mdx`],
+        trees: [CONTENT_DOCS_BASE],
+      },
     });
 
-    await this.github.createOrUpdateFile({
-      path: `${roadmapDir}/meta.json`,
-      content: JSON.stringify({ title, pages: ["index", "...rest"] }, null, 2) + "\n",
-      message: `Create roadmap meta.json: ${title}`,
-      branch: branchName,
-    });
-
-    await patchMetaPages(
-      this.github,
-      `${CONTENT_DOCS_BASE}/meta.json`,
-      branchName,
-      slug,
-      `Add ${slug} to root meta.json`,
-    );
-
-    const pr = await this.github.createPullRequest({
-      title: `New roadmap: ${title}`,
-      body: `Created new roadmap: ${slug}`,
-      head: branchName,
-      base: "main",
-    });
-
-    try {
-      await this.github.mergePullRequest(pr.number, "merge");
-      await this.github.deleteBranch(branchName);
-      this.github.invalidate.prefix(roadmapDir, "main");
-      this.github.invalidate.file(`${CONTENT_DOCS_BASE}/meta.json`, "main");
-      this.github.invalidate.file(`${ROADMAP_META_BASE}/${slug}.mdx`, "main");
-      this.github.invalidate.tree(CONTENT_DOCS_BASE, "main");
-    } catch {
-      // Auto-merge may fail (branch protection etc.) — leave PR open.
-    }
-
-    return { prNumber: pr.number, branchName };
+    return ref;
   }
 
   async createTrack({
@@ -607,60 +640,53 @@ class OctokitContentRepository implements ContentRepository {
       throw new ContentAlreadyExistsError(`Track "${trackSlug}" already exists`);
     } catch (err) {
       if (err instanceof ContentAlreadyExistsError) throw err;
-      if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+      if (!(err instanceof GitHubNotFoundError)) throw err;
     }
-
-    const branchName = `content/${trackSlug}-${Date.now()}`;
-    const mainSha = await this.github.getMainHeadSha();
-    await this.github.createBranch(branchName, mainSha);
-
-    await ensureRoadmapIndex(this.github, roadmap, roadmap, branchName);
 
     const normalizedTitle = trackTitle
       .split(" ")
       .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
       .join(" ");
 
-    await this.github.createOrUpdateFile({
-      path: `${trackDir}/index.mdx`,
-      content: serializeMdx({ title: normalizedTitle, description: "" }, ""),
-      message: `Create track index: ${normalizedTitle}`,
-      branch: branchName,
+    const ref = await this.openSubmission({
+      branchName: `content/${trackSlug}-${Date.now()}`,
+      prTitle: `New track: ${normalizedTitle}`,
+      prBody: `Created new track in ${roadmap}: ${normalizedTitle}`,
+      writes: async (branch) => {
+        await ensureRoadmapIndex(this.github, roadmap, roadmap, branch);
+        await this.github.createOrUpdateFile({
+          path: `${trackDir}/index.mdx`,
+          content: serializeMdx({ title: normalizedTitle, description: "" }, ""),
+          message: `Create track index: ${normalizedTitle}`,
+          branch,
+        });
+        await this.github.createOrUpdateFile({
+          path: `${trackDir}/meta.json`,
+          content: JSON.stringify({ title: normalizedTitle, pages: ["index"] }, null, 2) + "\n",
+          message: `Create track meta.json: ${normalizedTitle}`,
+          branch,
+        });
+        await patchMetaPages(
+          this.github,
+          `${CONTENT_DOCS_BASE}/${roadmap}/meta.json`,
+          branch,
+          trackSlug,
+          `Add ${trackSlug} to roadmap meta.json`,
+        );
+      },
     });
 
-    await this.github.createOrUpdateFile({
-      path: `${trackDir}/meta.json`,
-      content: JSON.stringify({ title: normalizedTitle, pages: ["index"] }, null, 2) + "\n",
-      message: `Create track meta.json: ${normalizedTitle}`,
-      branch: branchName,
+    await this.publishSubmission({
+      ref,
+      tolerateFailure: true,
+      invalidate: {
+        prefixes: [trackDir],
+        files: [`${CONTENT_DOCS_BASE}/${roadmap}/meta.json`],
+        trees: [`${CONTENT_DOCS_BASE}/${roadmap}`],
+      },
     });
 
-    await patchMetaPages(
-      this.github,
-      `${CONTENT_DOCS_BASE}/${roadmap}/meta.json`,
-      branchName,
-      trackSlug,
-      `Add ${trackSlug} to roadmap meta.json`,
-    );
-
-    const pr = await this.github.createPullRequest({
-      title: `New track: ${normalizedTitle}`,
-      body: `Created new track in ${roadmap}: ${normalizedTitle}`,
-      head: branchName,
-      base: "main",
-    });
-
-    try {
-      await this.github.mergePullRequest(pr.number, "merge");
-      await this.github.deleteBranch(branchName);
-      this.github.invalidate.prefix(trackDir, "main");
-      this.github.invalidate.file(`${CONTENT_DOCS_BASE}/${roadmap}/meta.json`, "main");
-      this.github.invalidate.tree(`${CONTENT_DOCS_BASE}/${roadmap}`, "main");
-    } catch {
-      // Leave PR open if auto-merge fails.
-    }
-
-    return { prNumber: pr.number, branchName };
+    return ref;
   }
 
   async deleteTopic(coords: ContentCoords): Promise<void> {
@@ -670,7 +696,7 @@ class OctokitContentRepository implements ContentRepository {
     try {
       ({ sha: fileSha } = await this.github.getFileContent(filePath, "main"));
     } catch (err) {
-      if (err instanceof Error && err.message.includes("not found")) {
+      if (err instanceof GitHubNotFoundError) {
         throw new ContentNotFoundError(`Topic "${coords.slug}" not found`);
       }
       throw err;
@@ -707,7 +733,7 @@ class OctokitContentRepository implements ContentRepository {
     try {
       await this.github.getDirectoryTree(trackDir, "main");
     } catch (err) {
-      if (err instanceof Error && err.message.includes("not found")) {
+      if (err instanceof GitHubNotFoundError) {
         throw new ContentNotFoundError(`Track "${trackSlug}" not found`);
       }
       throw err;
@@ -801,7 +827,7 @@ class OctokitContentRepository implements ContentRepository {
     try {
       await this.github.getDirectoryTree(roadmapDir, "main");
     } catch (err) {
-      if (err instanceof Error && err.message.includes("not found")) {
+      if (err instanceof GitHubNotFoundError) {
         throw new ContentNotFoundError(`Roadmap "${slug}" not found`);
       }
       throw err;
@@ -854,45 +880,34 @@ class OctokitContentRepository implements ContentRepository {
       throw new ContentAlreadyExistsError(`Topic "${coords.slug}" already exists`);
     } catch (err) {
       if (err instanceof ContentAlreadyExistsError) throw err;
-      if (!(err instanceof Error) || !err.message.includes("not found")) throw err;
+      if (!(err instanceof GitHubNotFoundError)) throw err;
     }
 
     const defaultFrontmatter = { title: humanize(coords.slug) };
-    const branchName = contentBranchName(coords);
-
-    if (await this.github.branchExists(branchName)) {
-      await this.github.deleteBranch(branchName);
-    }
-    const mainSha = await this.github.getMainHeadSha();
-    await this.github.createBranch(branchName, mainSha);
-
-    await ensureRoadmapIndex(this.github, coords.roadmap, coords.roadmap, branchName);
-
-    await this.github.createOrUpdateFile({
-      path: filePath,
-      content: serializeMdx(defaultFrontmatter, ""),
-      message: `Create new content: ${defaultFrontmatter.title}`,
-      branch: branchName,
+    return this.openSubmission({
+      branchName: contentBranchName(coords),
+      prTitle: `New content: ${defaultFrontmatter.title}`,
+      prBody: `Created new content file: ${filePath}`,
+      discardStale: true,
+      writes: async (branch) => {
+        await ensureRoadmapIndex(this.github, coords.roadmap, coords.roadmap, branch);
+        await this.github.createOrUpdateFile({
+          path: filePath,
+          content: serializeMdx(defaultFrontmatter, ""),
+          message: `Create new content: ${defaultFrontmatter.title}`,
+          branch,
+        });
+        if (coords.track) {
+          await patchMetaPages(
+            this.github,
+            `${CONTENT_DOCS_BASE}/${coords.roadmap}/${coords.track}/meta.json`,
+            branch,
+            coords.slug,
+            `Add ${coords.slug} to ${coords.track}/meta.json`,
+          );
+        }
+      },
     });
-
-    if (coords.track) {
-      await patchMetaPages(
-        this.github,
-        `${CONTENT_DOCS_BASE}/${coords.roadmap}/${coords.track}/meta.json`,
-        branchName,
-        coords.slug,
-        `Add ${coords.slug} to ${coords.track}/meta.json`,
-      );
-    }
-
-    const pr = await this.github.createPullRequest({
-      title: `New content: ${defaultFrontmatter.title}`,
-      body: `Created new content file: ${filePath}`,
-      head: branchName,
-      base: "main",
-    });
-
-    return { prNumber: pr.number, branchName };
   }
 }
 
