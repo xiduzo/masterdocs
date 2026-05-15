@@ -7,7 +7,6 @@ import {
   ContentAlreadyExistsError,
   ContentMergeConflictError,
   ContentNotFoundError,
-  getContentRepository,
 } from "../lib/octokit-content-repository";
 
 /**
@@ -25,12 +24,12 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 });
 
 export const contentRouter = router({
-  list: adminProcedure.query(async () => {
-    return getContentRepository().listContent();
+  list: adminProcedure.query(async ({ ctx }) => {
+    return ctx.contentRepository.listContent();
   }),
 
-  listPending: adminProcedure.query(async () => {
-    return getContentRepository().listPendingSubmissions();
+  listPending: adminProcedure.query(async ({ ctx }) => {
+    return ctx.contentRepository.listPendingSubmissions();
   }),
 
   get: adminProcedure
@@ -42,9 +41,9 @@ export const contentRouter = router({
         fromBranch: z.boolean().optional(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       try {
-        return await getContentRepository().getTopic({
+        return await ctx.contentRepository.getTopic({
           roadmap: input.roadmap,
           slug: input.slug,
           track: input.track,
@@ -71,8 +70,8 @@ export const contentRouter = router({
         fileSha: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
-      return getContentRepository().submitTopicEdit({
+    .mutation(async ({ ctx, input }) => {
+      return ctx.contentRepository.submitTopicEdit({
         coords: { roadmap: input.roadmap, slug: input.slug, track: input.track },
         frontmatter: input.frontmatter,
         body: input.body,
@@ -88,7 +87,7 @@ export const contentRouter = router({
         track: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       if (!isValidSlug(input.slug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -96,7 +95,7 @@ export const contentRouter = router({
         });
       }
       try {
-        return await getContentRepository().createTopic({
+        return await ctx.contentRepository.createTopic({
           roadmap: input.roadmap,
           slug: input.slug,
           track: input.track,
@@ -111,9 +110,9 @@ export const contentRouter = router({
 
   publish: adminProcedure
     .input(z.object({ prNumber: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       try {
-        await getContentRepository().publishTopic(input.prNumber);
+        await ctx.contentRepository.publishTopic(input.prNumber);
       } catch (err) {
         if (err instanceof ContentMergeConflictError) {
           throw new TRPCError({ code: "CONFLICT", message: err.message });
@@ -125,28 +124,28 @@ export const contentRouter = router({
 
   discard: adminProcedure
     .input(z.object({ prNumber: z.number() }))
-    .mutation(async ({ input }) => {
-      await getContentRepository().discardTopic(input.prNumber);
+    .mutation(async ({ ctx, input }) => {
+      await ctx.contentRepository.discardTopic(input.prNumber);
       return { success: true };
     }),
 
   checkConflict: adminProcedure
     .input(z.object({ prNumber: z.number() }))
-    .query(async ({ input }) => {
-      return getContentRepository().checkConflict(input.prNumber);
+    .query(async ({ ctx, input }) => {
+      return ctx.contentRepository.checkConflict(input.prNumber);
     }),
 
   keepMineOnConflict: adminProcedure
     .input(z.object({ prNumber: z.number() }))
-    .mutation(async ({ input }) => {
-      await getContentRepository().keepMineOnConflict(input.prNumber);
+    .mutation(async ({ ctx, input }) => {
+      await ctx.contentRepository.keepMineOnConflict(input.prNumber);
       return { success: true };
     }),
 
   useMainOnConflict: adminProcedure
     .input(z.object({ prNumber: z.number() }))
-    .mutation(async ({ input }) => {
-      await getContentRepository().useMainOnConflict(input.prNumber);
+    .mutation(async ({ ctx, input }) => {
+      await ctx.contentRepository.useMainOnConflict(input.prNumber);
       return { success: true };
     }),
 
@@ -161,8 +160,8 @@ export const contentRouter = router({
         body: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
-      await getContentRepository().submitMergedContent({
+    .mutation(async ({ ctx, input }) => {
+      await ctx.contentRepository.submitMergedContent({
         prNumber: input.prNumber,
         frontmatter: input.frontmatter,
         body: input.body,
@@ -179,7 +178,7 @@ export const contentRouter = router({
         description: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       if (!isValidSlug(input.slug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -187,7 +186,7 @@ export const contentRouter = router({
         });
       }
       try {
-        return await getContentRepository().createRoadmap(input);
+        return await ctx.contentRepository.createRoadmap(input);
       } catch (err) {
         if (err instanceof ContentAlreadyExistsError) {
           throw new TRPCError({ code: "CONFLICT", message: err.message });
@@ -205,7 +204,7 @@ export const contentRouter = router({
         trackTitle: z.string().min(1),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       if (!isValidSlug(input.trackSlug)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -213,7 +212,7 @@ export const contentRouter = router({
         });
       }
       try {
-        return await getContentRepository().createTrack(input);
+        return await ctx.contentRepository.createTrack(input);
       } catch (err) {
         if (err instanceof ContentAlreadyExistsError) {
           throw new TRPCError({ code: "CONFLICT", message: err.message });
@@ -230,7 +229,7 @@ export const contentRouter = router({
         slug: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       if (input.slug === "index") {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -238,7 +237,7 @@ export const contentRouter = router({
         });
       }
       try {
-        await getContentRepository().deleteTopic({
+        await ctx.contentRepository.deleteTopic({
           roadmap: input.roadmap,
           slug: input.slug,
           track: input.track,
@@ -259,9 +258,9 @@ export const contentRouter = router({
         track: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       try {
-        const { deletedFiles } = await getContentRepository().deleteTrack({
+        const { deletedFiles } = await ctx.contentRepository.deleteTrack({
           roadmap: input.roadmap,
           trackSlug: input.track,
         });
@@ -280,9 +279,9 @@ export const contentRouter = router({
         roadmap: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       try {
-        const { deletedFiles } = await getContentRepository().deleteRoadmap(
+        const { deletedFiles } = await ctx.contentRepository.deleteRoadmap(
           input.roadmap,
         );
         return { success: true, deletedFiles };
@@ -313,7 +312,7 @@ export const contentRouter = router({
         ),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const invalidIndexItem = input.items.find(
         (item) => item.slug === "index" || item.track === "index",
       );
@@ -340,7 +339,7 @@ export const contentRouter = router({
         }
       }
 
-      const repo = getContentRepository();
+      const repo = ctx.contentRepository;
 
       for (const [trackSlug, topics] of topicsByTrack) {
         const orderedTopicSlugs = topics
