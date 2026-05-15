@@ -13,6 +13,7 @@ import { serializeMdx } from "./mdx";
 import {
   ContentAlreadyExistsError,
   ContentMergeConflictError,
+  ContentNotFoundError,
   type ConflictStatus,
   type ContentCoords,
   type ContentRepository,
@@ -258,6 +259,42 @@ export class FakeContentRepository implements ContentRepository {
     this.prBaseSha.set(pr.prNumber, this.currentMainSha);
     this.prMainModifiedFiles.set(pr.prNumber, new Set());
     return { prNumber: pr.prNumber, branchName: pr.branchName };
+  }
+
+  async deleteTopic(coords: ContentCoords): Promise<void> {
+    const filePath = contentFilePath(coords);
+    if (!this.main.has(filePath)) {
+      throw new ContentNotFoundError(`Topic "${coords.slug}" not found`);
+    }
+    this.main.delete(filePath);
+  }
+
+  async deleteTrack({
+    roadmap,
+    trackSlug,
+  }: Parameters<ContentRepository["deleteTrack"]>[0]): Promise<{ deletedFiles: number }> {
+    const prefix = `apps/fumadocs/content/docs/${roadmap}/${trackSlug}/`;
+    const targets = [...this.main.keys()].filter((p) => p.startsWith(prefix));
+    if (targets.length === 0) {
+      throw new ContentNotFoundError(`Track "${trackSlug}" not found`);
+    }
+    for (const p of targets) this.main.delete(p);
+    return { deletedFiles: targets.length };
+  }
+
+  async deleteRoadmap(slug: string): Promise<{ deletedFiles: number }> {
+    const docsPrefix = `apps/fumadocs/content/docs/${slug}/`;
+    const docsTargets = [...this.main.keys()].filter((p) =>
+      p.startsWith(docsPrefix),
+    );
+    const roadmapMdxPath = `apps/fumadocs/content/roadmaps/${slug}.mdx`;
+    const roadmapMdxExists = this.main.has(roadmapMdxPath);
+    if (docsTargets.length === 0 && !roadmapMdxExists) {
+      throw new ContentNotFoundError(`Roadmap "${slug}" not found`);
+    }
+    for (const p of docsTargets) this.main.delete(p);
+    if (roadmapMdxExists) this.main.delete(roadmapMdxPath);
+    return { deletedFiles: docsTargets.length };
   }
 
   private roadmapExistsOnMain(slug: string): boolean {

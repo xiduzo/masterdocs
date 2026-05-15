@@ -23,13 +23,18 @@ import { serializeMdx } from "./mdx";
 import {
   ContentAlreadyExistsError,
   ContentMergeConflictError,
+  ContentNotFoundError,
   type ConflictStatus,
   type ContentRepository,
   type SubmissionRef,
   type SubmitTopicEditResult,
 } from "./content-repository";
 
-export { ContentAlreadyExistsError, ContentMergeConflictError };
+export {
+  ContentAlreadyExistsError,
+  ContentMergeConflictError,
+  ContentNotFoundError,
+};
 
 function humanize(slug: string): string {
   return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -78,6 +83,59 @@ async function patchMetaPages(
     });
   } catch {
     // missing or unreadable meta.json → skip (matches previous behaviour)
+  }
+}
+
+function removePageFromMeta(rawMeta: string, page: string): string | null {
+  try {
+    const parsed = JSON.parse(rawMeta);
+    if (!Array.isArray(parsed.pages) || !parsed.pages.includes(page)) return null;
+    parsed.pages = parsed.pages.filter((p: string) => p !== page);
+    return JSON.stringify(parsed, null, 2) + "\n";
+  } catch {
+    return null;
+  }
+}
+
+async function listFilesRecursively(
+  github: GitHubService,
+  dirPath: string,
+  branch = "main",
+): Promise<string[]> {
+  const files: string[] = [];
+  const queue: string[] = [dirPath];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    const entries = await github.getDirectoryTree(current, branch);
+    for (const entry of entries) {
+      if (entry.type === "file") files.push(entry.path);
+      else if (entry.type === "dir") queue.push(entry.path);
+    }
+  }
+  return files;
+}
+
+async function patchMetaRemovePage(
+  github: GitHubService,
+  metaPath: string,
+  branch: string,
+  page: string,
+  commitMessage: string,
+): Promise<void> {
+  try {
+    const { content: rawMeta, sha: metaSha } = await github.getFileContent(metaPath, branch);
+    const updated = removePageFromMeta(rawMeta, page);
+    if (!updated) return;
+    await github.createOrUpdateFile({
+      path: metaPath,
+      content: updated,
+      message: commitMessage,
+      branch,
+      sha: metaSha,
+    });
+  } catch {
+    // missing or invalid meta.json → skip (matches previous behaviour)
   }
 }
 
@@ -366,6 +424,132 @@ class OctokitContentRepository implements ContentRepository {
     }
 
     return { prNumber: pr.number, branchName };
+  }
+
+  async deleteTopic(coords: ContentCoords): Promise<void> {
+    const filePath = contentFilePath(coords);
+
+    let fileSha: string;
+    try {
+      ({ sha: fileSha } = await this.github.getFileContent(filePath, "main"));
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("not found")) {
+        throw new ContentNotFoundError(`Topic "${coords.slug}" not found`);
+      }
+      throw err;
+    }
+
+    await this.github.deleteFile({
+      path: filePath,
+      message: `Delete content: ${coords.slug}`,
+      branch: "main",
+      sha: fileSha,
+    });
+
+    const metaPath = coords.track
+      ? `${CONTENT_DOCS_BASE}/${coords.roadmap}/${coords.track}/meta.json`
+      : `${CONTENT_DOCS_BASE}/${coords.roadmap}/meta.json`;
+    await patchMetaRemovePage(
+      this.github,
+      metaPath,
+      "main",
+      coords.slug,
+      `Remove ${coords.slug} from meta.json`,
+    );
+
+    this.github.invalidate.file(filePath, "main");
+    this.github.invalidate.file(metaPath, "main");
+  }
+
+  async deleteTrack({
+    roadmap,
+    trackSlug,
+  }: Parameters<ContentRepository["deleteTrack"]>[0]): Promise<{ deletedFiles: number }> {
+    const trackDir = `${CONTENT_DOCS_BASE}/${roadmap}/${trackSlug}`;
+
+    try {
+      await this.github.getDirectoryTree(trackDir, "main");
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("not found")) {
+        throw new ContentNotFoundError(`Track "${trackSlug}" not found`);
+      }
+      throw err;
+    }
+
+    const trackFiles = await listFilesRecursively(this.github, trackDir, "main");
+    for (const filePath of trackFiles.sort((a, b) => b.length - a.length)) {
+      const { sha } = await this.github.getFileContent(filePath, "main");
+      await this.github.deleteFile({
+        path: filePath,
+        message: `Delete track file: ${filePath}`,
+        branch: "main",
+        sha,
+      });
+    }
+
+    await patchMetaRemovePage(
+      this.github,
+      `${CONTENT_DOCS_BASE}/${roadmap}/meta.json`,
+      "main",
+      trackSlug,
+      `Remove track ${trackSlug} from roadmap meta.json`,
+    );
+
+    this.github.invalidate.prefix(trackDir, "main");
+    this.github.invalidate.tree(`${CONTENT_DOCS_BASE}/${roadmap}`, "main");
+
+    return { deletedFiles: trackFiles.length };
+  }
+
+  async deleteRoadmap(slug: string): Promise<{ deletedFiles: number }> {
+    const roadmapDir = `${CONTENT_DOCS_BASE}/${slug}`;
+
+    try {
+      await this.github.getDirectoryTree(roadmapDir, "main");
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("not found")) {
+        throw new ContentNotFoundError(`Roadmap "${slug}" not found`);
+      }
+      throw err;
+    }
+
+    const roadmapFiles = await listFilesRecursively(this.github, roadmapDir, "main");
+    for (const filePath of roadmapFiles.sort((a, b) => b.length - a.length)) {
+      const { sha } = await this.github.getFileContent(filePath, "main");
+      await this.github.deleteFile({
+        path: filePath,
+        message: `Delete roadmap file: ${filePath}`,
+        branch: "main",
+        sha,
+      });
+    }
+
+    const roadmapMetaPath = `${ROADMAP_META_BASE}/${slug}.mdx`;
+    try {
+      const { sha } = await this.github.getFileContent(roadmapMetaPath, "main");
+      await this.github.deleteFile({
+        path: roadmapMetaPath,
+        message: `Delete roadmap metadata: ${slug}`,
+        branch: "main",
+        sha,
+      });
+    } catch {
+      // metadata file may not exist — skip
+    }
+
+    await patchMetaRemovePage(
+      this.github,
+      `${CONTENT_DOCS_BASE}/meta.json`,
+      "main",
+      slug,
+      `Remove roadmap ${slug} from root meta.json`,
+    );
+
+    this.github.invalidate.prefix(roadmapDir, "main");
+    this.github.invalidate.tree(CONTENT_DOCS_BASE, "main");
+    this.github.invalidate.tree(ROADMAP_META_BASE, "main");
+
+    return { deletedFiles: roadmapFiles.length };
   }
 
   async createTopic(coords: ContentCoords): Promise<SubmissionRef> {

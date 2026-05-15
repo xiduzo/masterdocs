@@ -120,6 +120,31 @@ export interface ContentRepository {
    * ContentAlreadyExistsError if the Topic exists on main.
    */
   createTopic(coords: ContentCoords): Promise<SubmissionRef>;
+
+  /**
+   * Delete a single Topic on main. Patches the parent Track's
+   * meta.json. Topic index files are not deletable through this verb —
+   * the caller is expected to call deleteTrack or deleteRoadmap instead.
+   */
+  deleteTopic(coords: ContentCoords): Promise<void>;
+
+  /**
+   * Delete an entire Track recursively, including its files and
+   * meta.json. Patches the Roadmap's meta.json. Returns the count of
+   * deleted files. Throws ContentNotFoundError if the Track is missing.
+   */
+  deleteTrack(params: {
+    roadmap: string;
+    trackSlug: string;
+  }): Promise<{ deletedFiles: number }>;
+
+  /**
+   * Delete an entire Roadmap recursively. Removes content/docs/<slug>/,
+   * content/roadmaps/<slug>.mdx, and patches the root meta.json.
+   * Returns the count of deleted files. Throws ContentNotFoundError if
+   * the Roadmap is missing.
+   */
+  deleteRoadmap(slug: string): Promise<{ deletedFiles: number }>;
 }
 
 export interface ConflictStatus {
@@ -150,6 +175,18 @@ export class ContentMergeConflictError extends Error {
  */
 export class ContentAlreadyExistsError extends Error {
   readonly name = "ContentAlreadyExistsError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/**
+ * Tagged error raised by delete* verbs when the target resource is
+ * missing. The tRPC router surfaces this as a
+ * `TRPCError({ code: "NOT_FOUND" })`.
+ */
+export class ContentNotFoundError extends Error {
+  readonly name = "ContentNotFoundError";
   constructor(message: string) {
     super(message);
   }

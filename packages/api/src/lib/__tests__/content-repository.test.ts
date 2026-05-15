@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   ContentAlreadyExistsError,
   ContentMergeConflictError,
+  ContentNotFoundError,
 } from "../content-repository";
 import { FakeContentRepository } from "../fake-content-repository";
 
@@ -251,5 +252,64 @@ describe("createTopic", () => {
     await expect(
       repo.createTopic({ roadmap: "arduino", slug: "temperature", track: "sensors" }),
     ).rejects.toBeInstanceOf(ContentAlreadyExistsError);
+  });
+});
+
+describe("deleteTopic", () => {
+  test("removes a Topic that exists on main", async () => {
+    const coords = { roadmap: "arduino", slug: "temperature", track: "sensors" };
+    repo.seedMainFile(coords, "body");
+    await repo.deleteTopic(coords);
+    expect(repo.mainFiles()).toHaveLength(0);
+  });
+
+  test("raises ContentNotFoundError when Topic is missing", async () => {
+    await expect(
+      repo.deleteTopic({ roadmap: "arduino", slug: "missing", track: "sensors" }),
+    ).rejects.toBeInstanceOf(ContentNotFoundError);
+  });
+});
+
+describe("deleteTrack", () => {
+  test("removes every file under the Track directory", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    const result = await repo.deleteTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+    });
+    expect(result.deletedFiles).toBeGreaterThan(0);
+    const trackFilesStillPresent = repo
+      .mainFiles()
+      .filter((f) => f.path.includes("/arduino/sensors/"));
+    expect(trackFilesStillPresent).toHaveLength(0);
+  });
+
+  test("raises ContentNotFoundError when Track is missing", async () => {
+    await expect(
+      repo.deleteTrack({ roadmap: "arduino", trackSlug: "missing" }),
+    ).rejects.toBeInstanceOf(ContentNotFoundError);
+  });
+});
+
+describe("deleteRoadmap", () => {
+  test("removes the Roadmap directory and roadmap metadata mdx", async () => {
+    await repo.createRoadmap({ slug: "figma", title: "Figma" });
+    const result = await repo.deleteRoadmap("figma");
+    expect(result.deletedFiles).toBeGreaterThan(0);
+    const figmaFiles = repo
+      .mainFiles()
+      .filter((f) => f.path.includes("/figma/") || f.path.endsWith("/figma.mdx"));
+    expect(figmaFiles).toHaveLength(0);
+  });
+
+  test("raises ContentNotFoundError when Roadmap is missing", async () => {
+    await expect(repo.deleteRoadmap("missing")).rejects.toBeInstanceOf(
+      ContentNotFoundError,
+    );
   });
 });
