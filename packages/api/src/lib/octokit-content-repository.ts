@@ -501,6 +501,63 @@ class OctokitContentRepository implements ContentRepository {
     return { deletedFiles: trackFiles.length };
   }
 
+  async reorderTracksInRoadmap({
+    roadmap,
+    orderedTrackSlugs,
+  }: Parameters<ContentRepository["reorderTracksInRoadmap"]>[0]): Promise<void> {
+    await this.reorderMetaJsonPages(
+      `${CONTENT_DOCS_BASE}/${roadmap}/meta.json`,
+      "main",
+      orderedTrackSlugs,
+      `Reorder tracks in ${roadmap}`,
+    );
+  }
+
+  async reorderTopicsInTrack({
+    roadmap,
+    trackSlug,
+    orderedTopicSlugs,
+  }: Parameters<ContentRepository["reorderTopicsInTrack"]>[0]): Promise<void> {
+    await this.reorderMetaJsonPages(
+      `${CONTENT_DOCS_BASE}/${roadmap}/${trackSlug}/meta.json`,
+      "main",
+      orderedTopicSlugs,
+      `Reorder topics in ${trackSlug}`,
+    );
+  }
+
+  private async reorderMetaJsonPages(
+    metaPath: string,
+    branch: string,
+    orderedSlugs: string[],
+    commitMessage: string,
+  ): Promise<void> {
+    try {
+      const { content: raw, sha } = await this.github.getFileContent(metaPath, branch);
+      const meta = JSON.parse(raw);
+      if (!Array.isArray(meta.pages)) return;
+
+      const filteredOrdered = orderedSlugs.filter((s) => s !== "index");
+      const remaining = meta.pages.filter(
+        (p: string) => p !== "index" && !filteredOrdered.includes(p),
+      );
+      const newPages = ["index", ...filteredOrdered, ...remaining];
+
+      if (JSON.stringify(meta.pages) === JSON.stringify(newPages)) return;
+
+      meta.pages = newPages;
+      await this.github.createOrUpdateFile({
+        path: metaPath,
+        content: JSON.stringify(meta, null, 2) + "\n",
+        message: commitMessage,
+        branch,
+        sha,
+      });
+    } catch {
+      // meta.json missing or invalid → skip (matches previous behaviour)
+    }
+  }
+
   async deleteRoadmap(slug: string): Promise<{ deletedFiles: number }> {
     const roadmapDir = `${CONTENT_DOCS_BASE}/${slug}`;
 

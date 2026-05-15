@@ -542,7 +542,11 @@ export const contentRouter = router({
       }
     }),
 
-  /** Reorder tracks and/or topics within a roadmap. Updates meta.json files directly on main. */
+  /**
+   * Reorder Tracks and/or Topics within a Roadmap. The flat `items`
+   * payload comes from the admin DnD UI; this procedure dispatches it
+   * into the repo's two reorder verbs.
+   */
   reorder: adminProcedure
     .input(
       z.object({
@@ -568,94 +572,43 @@ export const contentRouter = router({
         });
       }
 
-      const github = getCachedGitHubService();
-      const contentBase = "apps/fumadocs/content/docs";
-
-      // Group items by track to determine which meta.json files to update
-      const trackTopics = new Map<string, { slug: string; topicOrder?: number }[]>();
-      const trackOrders = new Map<string, number>();
+      // Group items: track-order signals (per-track) and topic-order signals (per track).
+      const topicsByTrack = new Map<string, { slug: string; topicOrder: number }[]>();
+      const trackOrderByTrack = new Map<string, number>();
 
       for (const item of input.items) {
-        if (item.track) {
-          if (item.topicOrder !== undefined) {
-            const bucket = trackTopics.get(item.track) ?? [];
-            bucket.push({ slug: item.slug, topicOrder: item.topicOrder });
-            trackTopics.set(item.track, bucket);
-          }
-          if (item.trackOrder !== undefined) {
-            trackOrders.set(item.track, item.trackOrder);
-          }
+        if (!item.track) continue;
+        if (item.topicOrder !== undefined) {
+          const bucket = topicsByTrack.get(item.track) ?? [];
+          bucket.push({ slug: item.slug, topicOrder: item.topicOrder });
+          topicsByTrack.set(item.track, bucket);
+        }
+        if (item.trackOrder !== undefined) {
+          trackOrderByTrack.set(item.track, item.trackOrder);
         }
       }
 
-      let anyChanged = false;
+      const repo = getContentRepository();
 
-      // Update track meta.json files (topic ordering within tracks)
-      for (const [track, topics] of trackTopics) {
-        const metaPath = `${contentBase}/${input.roadmap}/${track}/meta.json`;
-        try {
-          const { content: metaRaw, sha } = await github.getFileContent(metaPath, "main");
-          const meta = JSON.parse(metaRaw);
-          if (!Array.isArray(meta.pages)) continue;
-
-          // Sort topics by new topicOrder, keep "index" first
-          const sorted = [...topics].sort((a, b) => (a.topicOrder ?? 0) - (b.topicOrder ?? 0));
-          const orderedTopics = sorted.map((t) => t.slug).filter((s) => s !== "index");
-          const remainingTopics = meta.pages.filter(
-            (page: string) => page !== "index" && !orderedTopics.includes(page),
-          );
-          const newPages = ["index", ...orderedTopics, ...remainingTopics];
-
-          // Only update if order actually changed
-          if (JSON.stringify(meta.pages) !== JSON.stringify(newPages)) {
-            meta.pages = newPages;
-            anyChanged = true;
-            await github.createOrUpdateFile({
-              path: metaPath,
-              content: JSON.stringify(meta, null, 2) + "\n",
-              message: `Reorder topics in ${track}`,
-              branch: "main",
-              sha,
-            });
-          }
-        } catch {
-          // Skip if meta.json doesn't exist
-        }
+      for (const [trackSlug, topics] of topicsByTrack) {
+        const orderedTopicSlugs = topics
+          .sort((a, b) => a.topicOrder - b.topicOrder)
+          .map((t) => t.slug);
+        await repo.reorderTopicsInTrack({
+          roadmap: input.roadmap,
+          trackSlug,
+          orderedTopicSlugs,
+        });
       }
 
-      // Update roadmap meta.json (track ordering)
-      if (trackOrders.size > 0) {
-        const metaPath = `${contentBase}/${input.roadmap}/meta.json`;
-        try {
-          const { content: metaRaw, sha } = await github.getFileContent(metaPath, "main");
-          const meta = JSON.parse(metaRaw);
-          if (Array.isArray(meta.pages)) {
-            const sorted = [...trackOrders.entries()].sort(([, a], [, b]) => a - b);
-            const orderedTracks = sorted.map(([track]) => track).filter((track) => track !== "index");
-            const remainingTracks = meta.pages.filter(
-              (page: string) => page !== "index" && !orderedTracks.includes(page),
-            );
-            const newPages = ["index", ...orderedTracks, ...remainingTracks];
-
-            if (JSON.stringify(meta.pages) !== JSON.stringify(newPages)) {
-              meta.pages = newPages;
-              anyChanged = true;
-              await github.createOrUpdateFile({
-                path: metaPath,
-                content: JSON.stringify(meta, null, 2) + "\n",
-                message: `Reorder tracks in ${input.roadmap}`,
-                branch: "main",
-                sha,
-              });
-            }
-          }
-        } catch {
-          // Skip if meta.json doesn't exist
-        }
-      }
-
-      if (!anyChanged) {
-        return { success: true };
+      if (trackOrderByTrack.size > 0) {
+        const orderedTrackSlugs = [...trackOrderByTrack.entries()]
+          .sort(([, a], [, b]) => a - b)
+          .map(([slug]) => slug);
+        await repo.reorderTracksInRoadmap({
+          roadmap: input.roadmap,
+          orderedTrackSlugs,
+        });
       }
 
       return { success: true };

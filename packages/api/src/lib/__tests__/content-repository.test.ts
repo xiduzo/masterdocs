@@ -313,3 +313,122 @@ describe("deleteRoadmap", () => {
     );
   });
 });
+
+function readMetaPages(repo: FakeContentRepository, metaPath: string): string[] {
+  const file = repo.mainFiles().find((f) => f.path === metaPath)!;
+  return JSON.parse(file.content).pages;
+}
+
+describe("reorderTracksInRoadmap", () => {
+  test("rewrites the roadmap meta.json pages array, pinning index first", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "communication",
+      trackTitle: "Communication",
+    });
+    // Seed the roadmap meta.json with the two new tracks
+    const roadmapMeta = "apps/fumadocs/content/docs/arduino/meta.json";
+    const seeded = repo
+      .mainFiles()
+      .find((f) => f.path === roadmapMeta);
+    expect(seeded).toBeDefined();
+    // Manually patch meta.json to include the tracks (Fake's create doesn't
+    // patch parent meta.json — that's an Octokit-side concern, not modelled
+    // here). For this test, replace the pages list explicitly.
+    repo.mainFiles().find((f) => f.path === roadmapMeta)!.content = JSON.stringify(
+      { title: "Arduino", pages: ["index", "sensors", "communication"] },
+      null,
+      2,
+    ) + "\n";
+
+    await repo.reorderTracksInRoadmap({
+      roadmap: "arduino",
+      orderedTrackSlugs: ["communication", "sensors"],
+    });
+
+    expect(readMetaPages(repo, roadmapMeta)).toEqual([
+      "index",
+      "communication",
+      "sensors",
+    ]);
+  });
+
+  test("untouched tracks remain after the explicit order", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    const roadmapMeta = "apps/fumadocs/content/docs/arduino/meta.json";
+    repo.mainFiles().find((f) => f.path === roadmapMeta)!.content = JSON.stringify(
+      { title: "Arduino", pages: ["index", "a", "b", "c", "d"] },
+      null,
+      2,
+    ) + "\n";
+
+    await repo.reorderTracksInRoadmap({
+      roadmap: "arduino",
+      orderedTrackSlugs: ["c", "a"],
+    });
+
+    expect(readMetaPages(repo, roadmapMeta)).toEqual([
+      "index",
+      "c",
+      "a",
+      "b",
+      "d",
+    ]);
+  });
+});
+
+describe("reorderTopicsInTrack", () => {
+  test("rewrites the track meta.json pages array, pinning index first", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    const trackMeta = "apps/fumadocs/content/docs/arduino/sensors/meta.json";
+    repo.mainFiles().find((f) => f.path === trackMeta)!.content = JSON.stringify(
+      { title: "Sensors", pages: ["index", "temperature", "humidity", "light"] },
+      null,
+      2,
+    ) + "\n";
+
+    await repo.reorderTopicsInTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      orderedTopicSlugs: ["light", "temperature", "humidity"],
+    });
+
+    expect(readMetaPages(repo, trackMeta)).toEqual([
+      "index",
+      "light",
+      "temperature",
+      "humidity",
+    ]);
+  });
+
+  test("no-op when order is unchanged", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    const trackMeta = "apps/fumadocs/content/docs/arduino/sensors/meta.json";
+    const before = repo.mainFiles().find((f) => f.path === trackMeta)!.content;
+
+    await repo.reorderTopicsInTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      orderedTopicSlugs: ["index"],
+    });
+
+    const after = repo.mainFiles().find((f) => f.path === trackMeta)!.content;
+    expect(after).toBe(before);
+  });
+});

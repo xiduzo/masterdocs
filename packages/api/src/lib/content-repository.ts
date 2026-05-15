@@ -145,6 +145,30 @@ export interface ContentRepository {
    * the Roadmap is missing.
    */
   deleteRoadmap(slug: string): Promise<{ deletedFiles: number }>;
+
+  /**
+   * Reorder the Tracks of a Roadmap. Rewrites `meta.json.pages` in
+   * `content/docs/<roadmap>/meta.json` directly on main, keeping any
+   * track entries not present in `orderedTrackSlugs` at the end. The
+   * `index` entry is always pinned first. No-op if the order has not
+   * changed.
+   */
+  reorderTracksInRoadmap(params: {
+    roadmap: string;
+    orderedTrackSlugs: string[];
+  }): Promise<void>;
+
+  /**
+   * Reorder the Topics within a Track. Rewrites `meta.json.pages` in
+   * `content/docs/<roadmap>/<track>/meta.json` directly on main, with
+   * the same index-pinned + trailing-leftover semantics as
+   * `reorderTracksInRoadmap`.
+   */
+  reorderTopicsInTrack(params: {
+    roadmap: string;
+    trackSlug: string;
+    orderedTopicSlugs: string[];
+  }): Promise<void>;
 }
 
 export interface ConflictStatus {

@@ -282,6 +282,52 @@ export class FakeContentRepository implements ContentRepository {
     return { deletedFiles: targets.length };
   }
 
+  async reorderTracksInRoadmap({
+    roadmap,
+    orderedTrackSlugs,
+  }: Parameters<ContentRepository["reorderTracksInRoadmap"]>[0]): Promise<void> {
+    const metaPath = `apps/fumadocs/content/docs/${roadmap}/meta.json`;
+    this.reorderMetaJsonPagesInPlace(metaPath, orderedTrackSlugs);
+  }
+
+  async reorderTopicsInTrack({
+    roadmap,
+    trackSlug,
+    orderedTopicSlugs,
+  }: Parameters<ContentRepository["reorderTopicsInTrack"]>[0]): Promise<void> {
+    const metaPath = `apps/fumadocs/content/docs/${roadmap}/${trackSlug}/meta.json`;
+    this.reorderMetaJsonPagesInPlace(metaPath, orderedTopicSlugs);
+  }
+
+  private reorderMetaJsonPagesInPlace(
+    metaPath: string,
+    orderedSlugs: string[],
+  ): void {
+    const file = this.main.get(metaPath);
+    if (!file) return;
+    let meta: { title?: string; pages?: string[] };
+    try {
+      meta = JSON.parse(file.content);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(meta.pages)) return;
+
+    const filteredOrdered = orderedSlugs.filter((s) => s !== "index");
+    const remaining = meta.pages.filter(
+      (p) => p !== "index" && !filteredOrdered.includes(p),
+    );
+    const newPages = ["index", ...filteredOrdered, ...remaining];
+    if (JSON.stringify(meta.pages) === JSON.stringify(newPages)) return;
+
+    meta.pages = newPages;
+    this.main.set(metaPath, {
+      path: metaPath,
+      content: JSON.stringify(meta, null, 2) + "\n",
+      sha: this.fakeSha(),
+    });
+  }
+
   async deleteRoadmap(slug: string): Promise<{ deletedFiles: number }> {
     const docsPrefix = `apps/fumadocs/content/docs/${slug}/`;
     const docsTargets = [...this.main.keys()].filter((p) =>
