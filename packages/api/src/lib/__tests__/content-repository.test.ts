@@ -6,6 +6,7 @@ import {
   ContentNotFoundError,
 } from "../content-repository";
 import { FakeContentRepository } from "../fake-content-repository";
+import { serializeMdx as serializeMdxForTests } from "../mdx";
 
 let repo: FakeContentRepository;
 
@@ -380,6 +381,98 @@ describe("reorderTracksInRoadmap", () => {
       "b",
       "d",
     ]);
+  });
+});
+
+describe("listContent", () => {
+  test("groups published files by Roadmap; pending edits override state", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    await repo.createTrack({
+      roadmap: "arduino",
+      trackSlug: "sensors",
+      trackTitle: "Sensors",
+    });
+    // Submit an edit to the track's index — should show pending_review on the list.
+    await repo.submitTopicEdit({
+      coords: { roadmap: "arduino", slug: "index", track: "sensors" },
+      frontmatter: { title: "Sensors (edited)" },
+      body: "",
+    });
+
+    const groups = await repo.listContent();
+    const arduino = groups.find((g) => g.roadmap === "arduino");
+    expect(arduino).toBeDefined();
+
+    const sensorsIndex = arduino!.files.find(
+      (f) => f.track === "sensors" && f.slug === "index",
+    );
+    expect(sensorsIndex?.state).toBe("pending_review");
+    expect(sensorsIndex?.title).toBe("Sensors (edited)");
+  });
+
+  test("surfaces pending Topics whose file does not exist on main", async () => {
+    await repo.submitTopicEdit({
+      coords: { roadmap: "figma", slug: "components", track: "ui" },
+      frontmatter: { title: "Components" },
+      body: "",
+    });
+    const groups = await repo.listContent();
+    const figma = groups.find((g) => g.roadmap === "figma");
+    expect(figma).toBeDefined();
+    expect(figma!.files).toHaveLength(1);
+    expect(figma!.files[0]!.state).toBe("pending_review");
+  });
+});
+
+describe("listPendingSubmissions", () => {
+  test("returns one row per open Submission", async () => {
+    const a = await repo.submitTopicEdit({
+      coords: { roadmap: "arduino", slug: "temperature", track: "sensors" },
+      frontmatter: { title: "Temperature" },
+      body: "",
+    });
+    await repo.submitTopicEdit({
+      coords: { roadmap: "arduino", slug: "humidity", track: "sensors" },
+      frontmatter: { title: "Humidity" },
+      body: "",
+    });
+    const rows = await repo.listPendingSubmissions();
+    expect(rows).toHaveLength(2);
+    const tempRow = rows.find((r) => r.prNumber === a.prNumber);
+    expect(tempRow?.title).toBe("Temperature");
+    expect(tempRow?.filePath).toContain("temperature.mdx");
+  });
+});
+
+describe("getTopic", () => {
+  test("returns the main version when no open Submission exists", async () => {
+    await repo.createRoadmap({ slug: "arduino", title: "Arduino" });
+    const view = await repo.getTopic({ roadmap: "arduino", slug: "index" });
+    expect(view.state).toBe("published");
+    expect(view.frontmatter.title).toBe("Arduino");
+  });
+
+  test("returns the pending version with mainBody for diffing", async () => {
+    const coords = { roadmap: "arduino", slug: "temperature", track: "sensors" };
+    repo.seedMainFile(coords, serializeMdxForTests({ title: "Old Temperature" }, "old body"));
+    await repo.submitTopicEdit({
+      coords,
+      frontmatter: { title: "New Temperature" },
+      body: "new body",
+    });
+
+    const view = await repo.getTopic(coords);
+    expect(view.state).toBe("pending_review");
+    expect(view.frontmatter.title).toBe("New Temperature");
+    expect(view.body).toBe("new body");
+    expect(view.mainBody).toBe("old body");
+    expect(view.changeRecord).toBeDefined();
+  });
+
+  test("throws ContentNotFoundError when nothing exists on main or in a Submission", async () => {
+    await expect(
+      repo.getTopic({ roadmap: "ghost", slug: "missing" }),
+    ).rejects.toBeInstanceOf(ContentNotFoundError);
   });
 });
 

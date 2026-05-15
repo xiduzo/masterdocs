@@ -19,15 +19,19 @@ import {
   getCachedGitHubService,
 } from "./github-cache";
 import type { GitHubService } from "./github";
-import { serializeMdx } from "./mdx";
+import { parseMdx, serializeMdx } from "./mdx";
 import {
   ContentAlreadyExistsError,
   ContentMergeConflictError,
   ContentNotFoundError,
   type ConflictStatus,
+  type ContentListFileRow,
+  type ContentListGroupRow,
   type ContentRepository,
+  type PendingSubmissionRow,
   type SubmissionRef,
   type SubmitTopicEditResult,
+  type TopicView,
 } from "./content-repository";
 
 export {
@@ -141,6 +145,239 @@ async function patchMetaRemovePage(
 
 class OctokitContentRepository implements ContentRepository {
   constructor(private readonly github: CachedGitHubService) {}
+
+  async listContent(): Promise<ContentListGroupRow[]> {
+    const topLevel = await this.github.getDirectoryTree(CONTENT_DOCS_BASE);
+    const roadmapDirs = topLevel.filter((e) => e.type === "dir");
+
+    const openPRs = await this.github.listContentPRs();
+    const pendingMap = new Map(
+      openPRs.map((pr) => [filePathFromBranch(pr.branchName), pr.branchName] as const),
+    );
+    const roadmapDirNames = new Set(roadmapDirs.map((d) => d.path.split("/").pop()!));
+
+    const parseFile = async (filePath: string, trackSlug?: string): Promise<ContentListFileRow> => {
+      const slug = filePath.split("/").pop()!.replace(/\.mdx$/, "");
+      let title = slug;
+      let resolvedFromPendingBranch = false;
+      try {
+        const branch = pendingMap.get(filePath);
+        const { content } = await this.github.getFileContent(filePath, branch);
+        const parsed = parseMdx(content);
+        title = parsed.frontmatter.title || slug;
+        resolvedFromPendingBranch = !!branch;
+      } catch {
+        // fall back to slug as title
+      }
+      const state: "published" | "pending_review" = resolvedFromPendingBranch
+        ? "pending_review"
+        : "published";
+      return { slug, title, path: filePath, state, track: trackSlug };
+    };
+
+    const readMeta = async (
+      metaPath: string,
+    ): Promise<{ title?: string; pages?: string[] } | null> => {
+      try {
+        const { content } = await this.github.getFileContent(metaPath);
+        return JSON.parse(content);
+      } catch {
+        return null;
+      }
+    };
+
+    const results = await Promise.all(
+      roadmapDirs.map(async (dir): Promise<ContentListGroupRow> => {
+        const dirName = dir.path.split("/").pop()!;
+        const entries = await this.github.getDirectoryTree(dir.path);
+        const roadmapMdxFiles = entries.filter(
+          (e) => e.type === "file" && e.path.endsWith(".mdx"),
+        );
+        const trackDirs = entries.filter((e) => e.type === "dir");
+
+        const seenPaths = new Set<string>();
+
+        const roadmapMeta = await readMeta(`${dir.path}/meta.json`);
+        const roadmapPages = roadmapMeta?.pages ?? [];
+
+        const trackDirMap = new Map(
+          trackDirs.map((d) => [d.path.split("/").pop()!, d] as const),
+        );
+        const sortedTrackDirs = [
+          ...roadmapPages
+            .filter((name) => trackDirMap.has(name))
+            .map((name) => trackDirMap.get(name)!),
+          ...trackDirs.filter((d) => !roadmapPages.includes(d.path.split("/").pop()!)),
+        ];
+
+        const topLevelFiles = await Promise.all(
+          roadmapMdxFiles.map(async (file) => {
+            seenPaths.add(file.path);
+            return parseFile(file.path);
+          }),
+        );
+
+        const trackFiles = await Promise.all(
+          sortedTrackDirs.map(async (trackDir) => {
+            const trackSlug = trackDir.path.split("/").pop()!;
+            const trackEntries = await this.github.getDirectoryTree(trackDir.path);
+            const trackMdxFiles = trackEntries.filter(
+              (e) => e.type === "file" && e.path.endsWith(".mdx"),
+            );
+
+            const trackMeta = await readMeta(`${trackDir.path}/meta.json`);
+            const trackPages = trackMeta?.pages ?? [];
+
+            const fileMap = new Map(
+              trackMdxFiles.map(
+                (f) => [f.path.split("/").pop()!.replace(/\.mdx$/, ""), f] as const,
+              ),
+            );
+
+            const sortedMdxFiles = [
+              ...trackPages.filter((name) => fileMap.has(name)).map((name) => fileMap.get(name)!),
+              ...trackMdxFiles.filter(
+                (f) => !trackPages.includes(f.path.split("/").pop()!.replace(/\.mdx$/, "")),
+              ),
+            ];
+
+            return Promise.all(
+              sortedMdxFiles.map(async (file) => {
+                seenPaths.add(file.path);
+                const parsed = await parseFile(file.path, trackSlug);
+                return { ...parsed, trackTitle: trackMeta?.title ?? trackSlug };
+              }),
+            );
+          }),
+        );
+
+        const allFiles = [...topLevelFiles, ...trackFiles.flat()];
+
+        const pendingOnlyFiles = await Promise.all(
+          [...pendingMap.entries()]
+            .filter(([filePath]) => {
+              if (seenPaths.has(filePath)) return false;
+              const prefix = `${CONTENT_DOCS_BASE}/${dirName}/`;
+              return filePath.startsWith(prefix) && filePath.endsWith(".mdx");
+            })
+            .map(async ([filePath]) => {
+              const relative = filePath.slice(`${CONTENT_DOCS_BASE}/${dirName}/`.length);
+              const parts = relative.split("/");
+              const derivedTrack = parts.length > 1 ? parts[0] : undefined;
+              return parseFile(filePath, derivedTrack);
+            }),
+        );
+
+        return { roadmap: dirName, files: [...allFiles, ...pendingOnlyFiles] };
+      }),
+    );
+
+    // Pending files for Roadmap directories that don't exist on main yet.
+    const pendingNewRoadmaps = new Map<string, string[]>();
+    for (const [filePath] of pendingMap) {
+      if (!filePath.startsWith(`${CONTENT_DOCS_BASE}/`) || !filePath.endsWith(".mdx")) continue;
+      const relative = filePath.slice(CONTENT_DOCS_BASE.length + 1);
+      const parts = relative.split("/");
+      if (parts.length < 2) continue;
+      const dirName = parts[0]!;
+      if (roadmapDirNames.has(dirName)) continue;
+      if (!pendingNewRoadmaps.has(dirName)) pendingNewRoadmaps.set(dirName, []);
+      pendingNewRoadmaps.get(dirName)!.push(filePath);
+    }
+
+    const newRoadmapResults = await Promise.all(
+      [...pendingNewRoadmaps.entries()].map(
+        async ([dirName, filePaths]): Promise<ContentListGroupRow> => {
+          const files = await Promise.all(
+            filePaths.map(async (filePath) => {
+              const relative = filePath.slice(`${CONTENT_DOCS_BASE}/${dirName}/`.length);
+              const parts = relative.split("/");
+              const derivedTrack = parts.length > 1 ? parts[0] : undefined;
+              return parseFile(filePath, derivedTrack);
+            }),
+          );
+          return { roadmap: dirName, files };
+        },
+      ),
+    );
+
+    return [...results, ...newRoadmapResults];
+  }
+
+  async listPendingSubmissions(): Promise<PendingSubmissionRow[]> {
+    const prs = await this.github.listContentPRs();
+    return prs.map((pr) => ({
+      prNumber: pr.prNumber,
+      branchName: pr.branchName,
+      filePath: filePathFromBranch(pr.branchName),
+      title: pr.title,
+    }));
+  }
+
+  async getTopic(coords: Parameters<ContentRepository["getTopic"]>[0]): Promise<TopicView> {
+    const filePath = contentFilePath(coords);
+    const branchName = contentBranchName(coords);
+
+    const pr = await this.github.getPRByBranch(branchName);
+    const branch = pr?.branchName;
+
+    let resolvedFromPendingBranch = false;
+    let content: string;
+    let sha: string;
+
+    try {
+      const file = await this.github.getFileContent(filePath, branch);
+      content = file.content;
+      sha = file.sha;
+      resolvedFromPendingBranch = !!branch;
+    } catch (err) {
+      if (!pr || !(err instanceof Error) || !err.message.includes("not found")) {
+        if (err instanceof Error && err.message.includes("not found")) {
+          throw new ContentNotFoundError(`Topic not found: ${filePath}`);
+        }
+        throw err;
+      }
+      const fallback = await this.github.getFileContent(filePath);
+      content = fallback.content;
+      sha = fallback.sha;
+      resolvedFromPendingBranch = false;
+    }
+
+    const { frontmatter, body } = parseMdx(content);
+
+    let mainBody: string;
+    if (pr && resolvedFromPendingBranch) {
+      try {
+        const { content: mainContent } = await this.github.getFileContent(filePath);
+        mainBody = parseMdx(mainContent).body;
+      } catch {
+        mainBody = "";
+      }
+    } else {
+      mainBody = body;
+    }
+
+    const state: "published" | "pending_review" = resolvedFromPendingBranch
+      ? "pending_review"
+      : "published";
+
+    return {
+      frontmatter,
+      body,
+      state,
+      mainBody,
+      fileSha: sha,
+      ...(pr && resolvedFromPendingBranch
+        ? {
+            changeRecord: {
+              prNumber: pr.prNumber,
+              branchName: pr.branchName,
+              baseSha: pr.baseSha,
+            },
+          }
+        : {}),
+    };
+  }
 
   async submitTopicEdit({
     coords,

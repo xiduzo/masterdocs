@@ -8,23 +8,38 @@
  * suites can assert on observable state.
  */
 
-import { contentBranchName, contentFilePath } from "./content-paths";
-import { serializeMdx } from "./mdx";
+import { contentBranchName, contentFilePath, filePathFromBranch } from "./content-paths";
+import { parseMdx, serializeMdx } from "./mdx";
 import {
   ContentAlreadyExistsError,
   ContentMergeConflictError,
   ContentNotFoundError,
   type ConflictStatus,
   type ContentCoords,
+  type ContentListGroupRow,
   type ContentRepository,
+  type PendingSubmissionRow,
   type SubmissionRef,
   type SubmitTopicEditResult,
+  type TopicView,
 } from "./content-repository";
 
 interface BranchFile {
   path: string;
   content: string;
   sha: string;
+}
+
+function parseMdxSafe(content: string): ReturnType<typeof parseMdx> | null {
+  try {
+    return parseMdx(content);
+  } catch {
+    return null;
+  }
+}
+
+function safeBody(content: string): string {
+  return parseMdxSafe(content)?.body ?? "";
 }
 
 interface PendingPR {
@@ -341,6 +356,132 @@ export class FakeContentRepository implements ContentRepository {
     for (const p of docsTargets) this.main.delete(p);
     if (roadmapMdxExists) this.main.delete(roadmapMdxPath);
     return { deletedFiles: docsTargets.length };
+  }
+
+  async listContent(): Promise<ContentListGroupRow[]> {
+    const docsBase = "apps/fumadocs/content/docs";
+    const groups = new Map<string, ContentListGroupRow>();
+
+    for (const file of this.main.values()) {
+      if (!file.path.startsWith(`${docsBase}/`) || !file.path.endsWith(".mdx")) continue;
+      const rel = file.path.slice(docsBase.length + 1);
+      const parts = rel.split("/");
+      const roadmap = parts[0]!;
+      const slug = parts[parts.length - 1]!.replace(/\.mdx$/, "");
+      const track = parts.length === 3 ? parts[1]! : undefined;
+
+      let group = groups.get(roadmap);
+      if (!group) {
+        group = { roadmap, files: [] };
+        groups.set(roadmap, group);
+      }
+
+      let title = slug;
+      try {
+        title = parseMdx(file.content).frontmatter.title || slug;
+      } catch {
+        // empty body, etc.
+      }
+
+      group.files.push({
+        slug,
+        title,
+        path: file.path,
+        state: "published",
+        track,
+      });
+    }
+
+    // Surface pending Submissions whose target file does not exist on main yet.
+    for (const pr of this.prs.values()) {
+      const rel = pr.file.path.slice(`${docsBase}/`.length);
+      const parts = rel.split("/");
+      const roadmap = parts[0]!;
+      const slug = parts[parts.length - 1]!.replace(/\.mdx$/, "");
+      const track = parts.length === 3 ? parts[1]! : undefined;
+
+      let group = groups.get(roadmap);
+      if (!group) {
+        group = { roadmap, files: [] };
+        groups.set(roadmap, group);
+      }
+
+      const existing = group.files.find(
+        (f) => f.slug === slug && f.track === track,
+      );
+      if (existing) {
+        existing.state = "pending_review";
+        try {
+          existing.title = parseMdx(pr.file.content).frontmatter.title || slug;
+        } catch {
+          // skip
+        }
+      } else {
+        let title = slug;
+        try {
+          title = parseMdx(pr.file.content).frontmatter.title || slug;
+        } catch {
+          // skip
+        }
+        group.files.push({
+          slug,
+          title,
+          path: pr.file.path,
+          state: "pending_review",
+          track,
+        });
+      }
+    }
+
+    return [...groups.values()];
+  }
+
+  async listPendingSubmissions(): Promise<PendingSubmissionRow[]> {
+    return [...this.prs.values()].map((pr) => ({
+      prNumber: pr.prNumber,
+      branchName: pr.branchName,
+      filePath: filePathFromBranch(pr.branchName),
+      title: pr.file.content
+        ? (parseMdxSafe(pr.file.content)?.frontmatter.title ?? pr.branchName)
+        : pr.branchName,
+    }));
+  }
+
+  async getTopic(coords: ContentCoords): Promise<TopicView> {
+    const filePath = contentFilePath(coords);
+    const branchName = contentBranchName(coords);
+    const pr = this.prsByBranch.get(branchName);
+
+    if (pr) {
+      const { frontmatter, body } = parseMdx(pr.file.content);
+      const mainFile = this.main.get(filePath);
+      const mainBody = mainFile ? safeBody(mainFile.content) : "";
+      return {
+        frontmatter,
+        body,
+        state: "pending_review",
+        mainBody,
+        fileSha: pr.file.sha,
+        changeRecord: {
+          prNumber: pr.prNumber,
+          branchName: pr.branchName,
+          baseSha: this.prBaseSha.get(pr.prNumber)!,
+        },
+      };
+    }
+
+    const mainFile = this.main.get(filePath);
+    if (!mainFile) {
+      throw new ContentNotFoundError(`Topic not found: ${filePath}`);
+    }
+    const { frontmatter, body } = parseMdx(mainFile.content);
+    return {
+      frontmatter,
+      body,
+      state: "published",
+      mainBody: body,
+      fileSha: mainFile.sha,
+    };
   }
 
   private roadmapExistsOnMain(slug: string): boolean {

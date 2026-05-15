@@ -169,6 +169,62 @@ export interface ContentRepository {
     trackSlug: string;
     orderedTopicSlugs: string[];
   }): Promise<void>;
+
+  /**
+   * List every Roadmap with its Tracks and Topics, in their display
+   * order. Includes both published Topics (on main) and pending-review
+   * Topics (resolved through open Submissions). Pending Topics that
+   * exist only on a feature branch are surfaced under the Roadmap they
+   * belong to even when the Roadmap directory itself does not yet exist
+   * on main.
+   */
+  listContent(): Promise<ContentListGroupRow[]>;
+
+  /** List every currently open Submission. */
+  listPendingSubmissions(): Promise<PendingSubmissionRow[]>;
+
+  /**
+   * Read a single Topic for editing. If a Submission for this Topic is
+   * open, the branch version is returned and `state: "pending_review"`;
+   * otherwise main's version is returned with `state: "published"`. When
+   * viewing a pending version, `mainBody` carries the currently-published
+   * body for side-by-side diffing.
+   */
+  getTopic(coords: ContentCoords): Promise<TopicView>;
+}
+
+export interface ContentListFileRow {
+  slug: string;
+  title: string;
+  path: string;
+  state: "published" | "pending_review";
+  track?: string;
+  trackTitle?: string;
+}
+
+export interface ContentListGroupRow {
+  roadmap: string;
+  files: ContentListFileRow[];
+}
+
+export interface PendingSubmissionRow {
+  prNumber: number;
+  branchName: string;
+  filePath: string;
+  title: string;
+}
+
+export interface TopicView {
+  frontmatter: MdxFrontmatter;
+  body: string;
+  state: "published" | "pending_review";
+  mainBody: string;
+  fileSha: string;
+  changeRecord?: {
+    prNumber: number;
+    branchName: string;
+    baseSha: string;
+  };
 }
 
 export interface ConflictStatus {
