@@ -1,3 +1,4 @@
+import type { DocsLayoutProps } from "fumadocs-ui/layouts/docs";
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
 import { AuthButton } from "@/components/auth-button";
@@ -23,8 +24,9 @@ export function homeOptions(): BaseLayoutProps {
   };
 }
 
-/** Used by DocsLayout (has sidebar — auth lives in sidebar footer) */
-export function docsOptions(): BaseLayoutProps {
+/** Used by DocsLayout (has sidebar — auth lives in sidebar footer).
+ *  `tree` is supplied by the layout component itself, not here. */
+export function docsOptions(): Omit<DocsLayoutProps, "tree"> {
   return {
     ...sharedBase,
     sidebar: {

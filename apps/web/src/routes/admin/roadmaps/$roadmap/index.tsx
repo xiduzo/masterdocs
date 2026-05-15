@@ -436,7 +436,7 @@ function SortableTopicRow({
       <TableCell className="py-2.5 pl-8">
         <Link
           to="/admin/roadmaps/$roadmap/tracks/$track/$slug"
-          params={{ roadmap, track: topic.track, slug: topic.slug }}
+          params={{ roadmap, track: topic.track!, slug: topic.slug }}
           className="flex items-center gap-2 hover:underline text-sm"
         >
           <File className="size-3.5 text-muted-foreground/50 shrink-0" />

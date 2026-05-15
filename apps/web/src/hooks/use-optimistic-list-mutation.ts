@@ -19,22 +19,27 @@ import {
  * `onError`. The mutation context surfaces `{ previous }` for any caller
  * that wants direct access to the pre-mutation snapshot.
  */
-export interface UseOptimisticListMutationOptions<TInput, TOutput, TCache>
+export interface UseOptimisticListMutationOptions<TInput, TOutput, TCache, TError = Error>
   extends Omit<
-    UseMutationOptions<TOutput, Error, TInput, { previous: TCache | undefined }>,
+    UseMutationOptions<TOutput, TError, TInput, { previous: TCache | undefined }>,
     "onMutate"
   > {
   queryKey: QueryKey;
   optimistic: (cache: TCache | undefined, input: TInput) => TCache | undefined;
 }
 
-export function useOptimisticListMutation<TInput, TOutput, TCache = unknown>(
-  opts: UseOptimisticListMutationOptions<TInput, TOutput, TCache>,
-): UseMutationResult<TOutput, Error, TInput, { previous: TCache | undefined }> {
+export function useOptimisticListMutation<
+  TInput,
+  TOutput,
+  TCache = unknown,
+  TError = Error,
+>(
+  opts: UseOptimisticListMutationOptions<TInput, TOutput, TCache, TError>,
+): UseMutationResult<TOutput, TError, TInput, { previous: TCache | undefined }> {
   const queryClient = useQueryClient();
   const { queryKey, optimistic, onError: userOnError, ...rest } = opts;
 
-  return useMutation<TOutput, Error, TInput, { previous: TCache | undefined }>({
+  return useMutation<TOutput, TError, TInput, { previous: TCache | undefined }>({
     ...rest,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey });
@@ -44,11 +49,11 @@ export function useOptimisticListMutation<TInput, TOutput, TCache = unknown>(
       );
       return { previous };
     },
-    onError: (error, input, context) => {
-      if (context) {
-        queryClient.setQueryData(queryKey, context.previous);
+    onError: (error, input, onMutateResult, mutationContext) => {
+      if (onMutateResult) {
+        queryClient.setQueryData(queryKey, onMutateResult.previous);
       }
-      userOnError?.(error, input, context);
+      userOnError?.(error, input, onMutateResult, mutationContext);
     },
   });
 }

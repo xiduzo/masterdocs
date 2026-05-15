@@ -282,7 +282,7 @@ function RoadmapsDashboard() {
                       <tr
                         key={row.slug}
                         className="border-b last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer"
-                        onClick={() => navigate({ to: "/admin/roadmaps/$roadmap/", params: { roadmap: row.slug } })}
+                        onClick={() => navigate({ to: "/admin/roadmaps/$roadmap", params: { roadmap: row.slug } })}
                       >
                         <td className="px-5 py-3.5">
                           <div
@@ -331,7 +331,7 @@ function RoadmapsDashboard() {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <Link
-                              to="/admin/roadmaps/$roadmap/"
+                              to="/admin/roadmaps/$roadmap"
                               params={{ roadmap: row.slug }}
                             >
                               <button

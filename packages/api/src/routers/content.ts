@@ -84,7 +84,7 @@ export const contentRouter = router({
       z.object({
         roadmap: z.string(),
         slug: z.string(),
-        track: z.string(),
+        track: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
