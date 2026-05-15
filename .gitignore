@@ -1,3 +1,7 @@
+# local artifacts
+node-compile-cache
+*/sw.js
+
 # Dependencies
 node_modules
 .pnp
