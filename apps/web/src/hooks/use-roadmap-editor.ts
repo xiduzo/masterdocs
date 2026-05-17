@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import {
   fromContentList,
-  type Topic as RoadmapTopic,
   type Track as RoadmapTrack,
 } from "@masterdocs/api/lib/roadmap-tree";
 import { slugToTitle, titleToSlug } from "@masterdocs/api/lib/slug";
@@ -36,8 +35,13 @@ export function useRoadmapEditor(roadmap: string) {
   const tracks: RoadmapTrack[] = roadmapTree?.tracks ?? [];
   const roadmapTitle = roadmapTree?.title ?? slugToTitle(roadmap);
 
-  const reorderMutation = useContentMutation({
-    ...trpc.content.reorder.mutationOptions(),
+  const reorderTracksMutation = useContentMutation({
+    ...trpc.content.reorderTracks.mutationOptions(),
+    errorPrefix: "Reorder failed",
+  });
+
+  const reorderTopicsMutation = useContentMutation({
+    ...trpc.content.reorderTopicsInTrack.mutationOptions(),
     errorPrefix: "Reorder failed",
   });
 
@@ -55,18 +59,8 @@ export function useRoadmapEditor(roadmap: string) {
 
   /** Persist a new top-to-bottom Track ordering for this Roadmap. */
   const reorderTracks = (orderedTrackSlugs: string[]): void => {
-    const ordered = orderedTrackSlugs
-      .map((slug) => tracks.find((t) => t.slug === slug))
-      .filter((t): t is RoadmapTrack => !!t);
-    const items = ordered.flatMap((track, i) =>
-      track.topics.map((topic) => ({
-        slug: topic.slug,
-        track: track.slug,
-        trackOrder: i + 1,
-      })),
-    );
-    if (items.length === 0) return;
-    reorderMutation.mutate({ roadmap, items });
+    if (orderedTrackSlugs.length === 0) return;
+    reorderTracksMutation.mutate({ roadmap, orderedTrackSlugs });
   };
 
   /** Persist a new top-to-bottom Topic ordering within a single Track. */
@@ -74,18 +68,8 @@ export function useRoadmapEditor(roadmap: string) {
     trackSlug: string,
     orderedTopicSlugs: string[],
   ): void => {
-    const track = tracks.find((t) => t.slug === trackSlug);
-    if (!track) return;
-    const ordered = orderedTopicSlugs
-      .map((slug) => track.topics.find((t) => t.slug === slug))
-      .filter((t): t is RoadmapTopic => !!t);
-    const items = ordered.map((topic, i) => ({
-      slug: topic.slug,
-      track: track.slug,
-      topicOrder: i + 1,
-    }));
-    if (items.length === 0) return;
-    reorderMutation.mutate({ roadmap, items });
+    if (orderedTopicSlugs.length === 0) return;
+    reorderTopicsMutation.mutate({ roadmap, trackSlug, orderedTopicSlugs });
   };
 
   const createTrack = (

@@ -293,75 +293,45 @@ export const contentRouter = router({
       }
     }),
 
-  /**
-   * Reorder Tracks and/or Topics within a Roadmap. The flat `items`
-   * payload comes from the admin DnD UI; this procedure dispatches it
-   * into the repo's two reorder verbs.
-   */
-  reorder: adminProcedure
+  /** Set the top-to-bottom Track order within a Roadmap. */
+  reorderTracks: adminProcedure
     .input(
       z.object({
         roadmap: z.string(),
-        items: z.array(
-          z.object({
-            slug: z.string(),
-            track: z.string().optional(),
-            trackOrder: z.number().optional(),
-            topicOrder: z.number().optional(),
-          }),
-        ),
+        orderedTrackSlugs: z.array(z.string()),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const invalidIndexItem = input.items.find(
-        (item) => item.slug === "index" || item.track === "index",
-      );
-      if (invalidIndexItem) {
+      if (input.orderedTrackSlugs.includes("index")) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: 'The "index" item cannot be reordered and must stay first.',
         });
       }
+      await ctx.contentRepository.reorderTracksInRoadmap(input);
+      return { success: true };
+    }),
 
-      // Group items: track-order signals (per-track) and topic-order signals (per track).
-      const topicsByTrack = new Map<string, { slug: string; topicOrder: number }[]>();
-      const trackOrderByTrack = new Map<string, number>();
-
-      for (const item of input.items) {
-        if (!item.track) continue;
-        if (item.topicOrder !== undefined) {
-          const bucket = topicsByTrack.get(item.track) ?? [];
-          bucket.push({ slug: item.slug, topicOrder: item.topicOrder });
-          topicsByTrack.set(item.track, bucket);
-        }
-        if (item.trackOrder !== undefined) {
-          trackOrderByTrack.set(item.track, item.trackOrder);
-        }
-      }
-
-      const repo = ctx.contentRepository;
-
-      for (const [trackSlug, topics] of topicsByTrack) {
-        const orderedTopicSlugs = topics
-          .sort((a, b) => a.topicOrder - b.topicOrder)
-          .map((t) => t.slug);
-        await repo.reorderTopicsInTrack({
-          roadmap: input.roadmap,
-          trackSlug,
-          orderedTopicSlugs,
+  /** Set the top-to-bottom Topic order within a single Track. */
+  reorderTopicsInTrack: adminProcedure
+    .input(
+      z.object({
+        roadmap: z.string(),
+        trackSlug: z.string(),
+        orderedTopicSlugs: z.array(z.string()),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (
+        input.trackSlug === "index" ||
+        input.orderedTopicSlugs.includes("index")
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: 'The "index" item cannot be reordered and must stay first.',
         });
       }
-
-      if (trackOrderByTrack.size > 0) {
-        const orderedTrackSlugs = [...trackOrderByTrack.entries()]
-          .sort(([, a], [, b]) => a - b)
-          .map(([slug]) => slug);
-        await repo.reorderTracksInRoadmap({
-          roadmap: input.roadmap,
-          orderedTrackSlugs,
-        });
-      }
-
+      await ctx.contentRepository.reorderTopicsInTrack(input);
       return { success: true };
     }),
 });

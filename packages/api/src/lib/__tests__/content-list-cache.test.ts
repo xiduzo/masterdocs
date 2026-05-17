@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  reorderTrackFiles,
-  reorderTracks,
   updateContentFile,
   updateRoadmapFiles,
   type ContentFile,
@@ -81,50 +79,3 @@ describe("updateContentFile", () => {
   });
 });
 
-describe("reorderTracks", () => {
-  test("assigns trackOrder by orderedTracks index", () => {
-    const files = fixture()[0]!.files;
-    const reordered = reorderTracks(files, ["sensors"]);
-    const sensorsFile = reordered.find((f) => f.slug === "a");
-    // trackOrder is a synthetic field; cast to access.
-    expect((sensorsFile as { trackOrder?: number }).trackOrder).toBe(1);
-  });
-
-  test("files without a track are returned unchanged (no trackOrder added)", () => {
-    const files = fixture()[0]!.files;
-    const reordered = reorderTracks(files, ["sensors"]);
-    expect(reordered[0]).toEqual(files[0]!);
-  });
-
-  test("unknown track yields trackOrder 0 (index -1 + 1)", () => {
-    const files = fixture()[0]!.files;
-    const reordered = reorderTracks(files, ["other"]);
-    const sensorsFile = reordered.find((f) => f.slug === "a");
-    expect((sensorsFile as { trackOrder?: number }).trackOrder).toBe(0);
-  });
-});
-
-describe("reorderTrackFiles", () => {
-  test("assigns topicOrder for matching track files", () => {
-    const files = fixture()[0]!.files;
-    const reordered = reorderTrackFiles(files, "sensors", ["b", "a"]);
-    expect((reordered.find((f) => f.slug === "a") as { topicOrder?: number }).topicOrder).toBe(2);
-    expect((reordered.find((f) => f.slug === "b") as { topicOrder?: number }).topicOrder).toBe(1);
-  });
-
-  test("files outside the track are returned unchanged", () => {
-    const files = fixture()[0]!.files;
-    const reordered = reorderTrackFiles(files, "other", ["a"]);
-    expect(reordered).toEqual(files);
-  });
-
-  test("a track's own index file is skipped", () => {
-    const files: ContentList[number]["files"] = [
-      baseFile({ slug: "index", track: "sensors" }),
-      baseFile({ slug: "a", track: "sensors" }),
-    ];
-    const reordered = reorderTrackFiles(files, "sensors", ["a"]);
-    expect((reordered[0] as { topicOrder?: number }).topicOrder).toBeUndefined();
-    expect((reordered[1] as { topicOrder?: number }).topicOrder).toBe(1);
-  });
-});

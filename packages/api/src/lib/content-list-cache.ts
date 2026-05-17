@@ -49,37 +49,3 @@ export function updateContentFile(
   );
 }
 
-/**
- * Assign the synthetic `trackOrder` field to each file according to its
- * Track's position in `orderedTracks`. Files without a Track are returned
- * unchanged.
- *
- * `trackOrder` is the input shape expected by the `content.reorder`
- * mutation, not part of the canonical RouterOutputs shape — it is written
- * onto cache files for optimistic-update bookkeeping only.
- */
-export function reorderTracks(
-  files: ContentFile[],
-  orderedTracks: string[],
-): ContentFile[] {
-  return files.map((f) =>
-    f.track ? { ...f, trackOrder: orderedTracks.indexOf(f.track) + 1 } : f,
-  );
-}
-
-/**
- * Assign the synthetic `topicOrder` field to each Topic in a specific
- * Track. Files outside the Track and the Track's own `index` file are
- * returned unchanged.
- */
-export function reorderTrackFiles(
-  files: ContentFile[],
-  trackSlug: string,
-  orderedSlugs: string[],
-): ContentFile[] {
-  return files.map((f) => {
-    if (f.track !== trackSlug || f.slug === "index") return f;
-    const idx = orderedSlugs.indexOf(f.slug);
-    return idx !== -1 ? { ...f, topicOrder: idx + 1 } : f;
-  });
-}
