@@ -11,6 +11,8 @@
  * No runtime dependencies. Safe to bundle into web/native clients.
  */
 
+import { slugToTitle } from "./slug";
+
 export interface RoadmapMetadata {
   slug: string;
   title: string;
@@ -185,11 +187,3 @@ export function fromContentList(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Local helper (intentionally not exported — same shape exists in -breadcrumbs
-// on web; consolidation into @masterdocs/ui or similar is out of scope here).
-// ---------------------------------------------------------------------------
-
-function slugToTitle(slug: string): string {
-  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}

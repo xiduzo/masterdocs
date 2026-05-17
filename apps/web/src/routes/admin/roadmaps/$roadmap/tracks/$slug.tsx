@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { slugToTitle } from "@masterdocs/api/lib/slug";
+
 import { ContentEditorView } from "@/components/content/editor-view";
-import { slugToTitle } from "@/routes/-breadcrumbs";
 
 const searchSchema = z.object({
   fromBranch: z.boolean().optional(),

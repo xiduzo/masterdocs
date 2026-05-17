@@ -1,6 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
 import { Alert, AlertTitle } from "@masterdocs/ui/components/alert";
@@ -9,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@masterdocs/ui/compone
 import { ScrollArea } from "@masterdocs/ui/components/scroll-area";
 import { Textarea } from "@masterdocs/ui/components/textarea";
 
+import { useContentMutation } from "@/hooks/use-content-mutation";
 import { trpc } from "@/utils/trpc";
 
 interface ConflictResolverProps {
@@ -29,62 +28,37 @@ export function ConflictResolver({
   const [mode, setMode] = useState<"compare" | "edit">("compare");
   const [manualBody, setManualBody] = useState(submittedBody);
 
-  const keepMine = useMutation(trpc.content.keepMineOnConflict.mutationOptions());
-  const useMain = useMutation(trpc.content.useMainOnConflict.mutationOptions());
-  const submitMerged = useMutation(
-    trpc.content.submitMergedContent.mutationOptions(),
-  );
+  const keepMine = useContentMutation({
+    ...trpc.content.keepMineOnConflict.mutationOptions(),
+    successMessage: "Conflict resolved — kept your changes",
+    errorPrefix: "Resolution failed",
+    onSuccess: () => onResolved(),
+  });
+  const useMain = useContentMutation({
+    ...trpc.content.useMainOnConflict.mutationOptions(),
+    successMessage: "Conflict resolved — reverted to published version",
+    errorPrefix: "Resolution failed",
+    onSuccess: () => onResolved(),
+  });
+  const submitMerged = useContentMutation({
+    ...trpc.content.submitMergedContent.mutationOptions(),
+    successMessage: "Conflict resolved — combined content submitted",
+    errorPrefix: "Resolution failed",
+    onSuccess: () => onResolved(),
+  });
 
   const isResolving =
     keepMine.isPending || useMain.isPending || submitMerged.isPending;
 
-  const handleKeepMine = () => {
-    keepMine.mutate(
-      { prNumber },
-      {
-        onSuccess: () => {
-          toast.success("Conflict resolved — kept your changes");
-          onResolved();
-        },
-        onError: (err) => {
-          toast.error(`Resolution failed: ${err.message}`);
-        },
-      },
-    );
-  };
+  const handleKeepMine = () => keepMine.mutate({ prNumber });
 
-  const handleUseMain = () => {
-    useMain.mutate(
-      { prNumber },
-      {
-        onSuccess: () => {
-          toast.success("Conflict resolved — reverted to published version");
-          onResolved();
-        },
-        onError: (err) => {
-          toast.error(`Resolution failed: ${err.message}`);
-        },
-      },
-    );
-  };
+  const handleUseMain = () => useMain.mutate({ prNumber });
 
   const handleSubmitManual = () => {
     const frontmatter: MdxFrontmatter = submittedFrontmatter ?? {
       title: "Untitled",
     };
-
-    submitMerged.mutate(
-      { prNumber, frontmatter, body: manualBody },
-      {
-        onSuccess: () => {
-          toast.success("Conflict resolved — combined content submitted");
-          onResolved();
-        },
-        onError: (err) => {
-          toast.error(`Resolution failed: ${err.message}`);
-        },
-      },
-    );
+    submitMerged.mutate({ prNumber, frontmatter, body: manualBody });
   };
 
   if (mode === "edit") {

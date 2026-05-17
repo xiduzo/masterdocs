@@ -1,6 +1,5 @@
-import { useRef, useState, useMemo } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   DndContext,
   DragOverlay,
@@ -30,15 +29,14 @@ import {
   TableRow,
 } from "@masterdocs/ui/components/table";
 import { File, FolderOpen, GripVertical, Plus } from "lucide-react";
-import { toast } from "sonner";
 
 import {
-  fromContentList,
   type Topic as RoadmapTopic,
   type Track as RoadmapTrack,
 } from "@masterdocs/api/lib/roadmap-tree";
+import { isValidSlug, slugToTitle, titleToSlug } from "@masterdocs/api/lib/slug";
 
-import { trpc } from "@/utils/trpc";
+import { useRoadmapEditor } from "@/hooks/use-roadmap-editor";
 
 export const Route = createFileRoute("/admin/roadmaps/$roadmap/")({
   component: RoadmapEditor,
@@ -52,40 +50,21 @@ export const Route = createFileRoute("/admin/roadmaps/$roadmap/")({
   },
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const SLUG_PATTERN = /^[a-z0-9-]+$/;
-
-function titleToSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function slugToTitle(slug: string) {
-  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 // ─── Route component ──────────────────────────────────────────────────────────
 
 function RoadmapEditor() {
   const { roadmap } = Route.useParams();
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
-  const contentListQueryKey = trpc.content.list.queryKey();
-
-  const reorderMutation = useMutation({
-    ...trpc.content.reorder.mutationOptions(),
-    onError: (err) => toast.error(`Reorder failed: ${err.message}`),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: contentListQueryKey }),
-  });
-  const createTrackMutation = useMutation(trpc.content.createTrack.mutationOptions());
-  const createTopicMutation = useMutation(trpc.content.create.mutationOptions());
+  const {
+    roadmapTitle,
+    tracks,
+    isLoading,
+    reorderTracks,
+    reorderTopicsInTrack,
+    createTrack,
+    createTopic,
+    isCreatingTrack,
+    isCreatingTopic,
+  } = useRoadmapEditor(roadmap);
 
   const [isAddingTrack, setIsAddingTrack] = useState(false);
   const [addingTopicForTrack, setAddingTopicForTrack] = useState<string | null>(null);
@@ -96,19 +75,6 @@ function RoadmapEditor() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const roadmapData = useMemo(
-    () => data?.find((r) => r.roadmap === roadmap),
-    [data, roadmap],
-  );
-
-  const roadmapTree = useMemo(
-    () => (roadmapData ? fromContentList(roadmapData) : undefined),
-    [roadmapData],
-  );
-
-  const roadmapTitle = roadmapTree?.title ?? slugToTitle(roadmap);
-  const tracks = roadmapTree?.tracks ?? [];
-
   const handleTrackDragStart = (event: DragStartEvent) => {
     setActiveTrackId(String(event.active.id));
   };
@@ -117,69 +83,31 @@ function RoadmapEditor() {
     setActiveTrackId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-
     const oldIndex = tracks.findIndex((t) => t.slug === active.id);
     const newIndex = tracks.findIndex((t) => t.slug === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-
     const reordered = arrayMove(tracks, oldIndex, newIndex);
-    const items = reordered.flatMap((track, i) =>
-      track.topics.map((topic) => ({
-        slug: topic.slug,
-        track: track.slug,
-        trackOrder: i + 1,
-      })),
-    );
-
-    reorderMutation.mutate({ roadmap, items });
+    reorderTracks(reordered.map((t) => t.slug));
   };
 
   const handleTopicDragEnd = (track: RoadmapTrack, event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-
     const oldIndex = track.topics.findIndex((t) => t.slug === active.id);
     const newIndex = track.topics.findIndex((t) => t.slug === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-
     const reordered = arrayMove(track.topics, oldIndex, newIndex);
-    const items = reordered.map((topic, i) => ({
-      slug: topic.slug,
-      track: track.slug,
-      topicOrder: i + 1,
-    }));
-
-    reorderMutation.mutate({ roadmap, items });
+    reorderTopicsInTrack(track.slug, reordered.map((t) => t.slug));
   };
 
   const handleCreateTrack = (title: string) => {
-    const trackSlug = titleToSlug(title);
-    createTrackMutation.mutate(
-      { roadmap, trackSlug, trackTitle: title.trim() },
-      {
-        onSuccess: () => {
-          toast.success("Track created");
-          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
-          setIsAddingTrack(false);
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    );
+    createTrack(title, { onSuccess: () => setIsAddingTrack(false) });
   };
 
   const handleCreateTopic = (trackSlug: string, title: string) => {
-    const slug = titleToSlug(title);
-    createTopicMutation.mutate(
-      { roadmap, slug, track: trackSlug },
-      {
-        onSuccess: () => {
-          toast.success("Topic created");
-          queryClient.invalidateQueries({ queryKey: contentListQueryKey });
-          setAddingTopicForTrack(null);
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    );
+    createTopic(trackSlug, title, {
+      onSuccess: () => setAddingTopicForTrack(null),
+    });
   };
 
   const trackIds = tracks.map((t) => t.slug);
@@ -224,7 +152,7 @@ function RoadmapEditor() {
                           onAddTopic={() => setAddingTopicForTrack(track.slug)}
                           onCancelAddTopic={() => setAddingTopicForTrack(null)}
                           onCreateTopic={(title) => handleCreateTopic(track.slug, title)}
-                          isCreatingTopic={createTopicMutation.isPending}
+                          isCreatingTopic={isCreatingTopic}
                           isBeingDragged={activeTrackId === track.slug}
                         />
                       ))}
@@ -242,7 +170,7 @@ function RoadmapEditor() {
                 {isAddingTrack ? (
                   <InlineInputRow
                     placeholder="Track title…"
-                    isPending={createTrackMutation.isPending}
+                    isPending={isCreatingTrack}
                     onSubmit={handleCreateTrack}
                     onCancel={() => setIsAddingTrack(false)}
                   />
@@ -505,7 +433,7 @@ function InlineInputRow({
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const slug = titleToSlug(value);
-  const canSubmit = slug.length > 0 && SLUG_PATTERN.test(slug) && !isPending;
+  const canSubmit = isValidSlug(slug) && !isPending;
 
   return (
     <TableRow>

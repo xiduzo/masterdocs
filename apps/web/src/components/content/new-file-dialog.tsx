@@ -1,7 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@masterdocs/ui/components/button";
 import { Field, FieldDescription, FieldError } from "@masterdocs/ui/components/field";
@@ -9,6 +7,9 @@ import { Input } from "@masterdocs/ui/components/input";
 import { Label } from "@masterdocs/ui/components/label";
 import { Separator } from "@masterdocs/ui/components/separator";
 
+import { isValidSlug } from "@masterdocs/api/lib/slug";
+
+import { useContentMutation } from "@/hooks/use-content-mutation";
 import { trpc } from "@/utils/trpc";
 
 interface NewFileDialogProps {
@@ -16,8 +17,6 @@ interface NewFileDialogProps {
   onOpenChange: (open: boolean) => void;
   roadmaps: string[];
 }
-
-const SLUG_PATTERN = /^[a-z0-9-]+$/;
 
 export function NewFileDialog({
   open,
@@ -27,11 +26,22 @@ export function NewFileDialog({
   const [roadmap, setRoadmap] = useState("");
   const [slug, setSlug] = useState("");
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const createMutation = useMutation(trpc.content.create.mutationOptions());
+  const createMutation = useContentMutation({
+    ...trpc.content.create.mutationOptions(),
+    successMessage: "File created successfully",
+    errorPrefix: "",
+    onSuccess: (_result, input) => {
+      reset();
+      onOpenChange(false);
+      navigate({
+        to: "/admin/roadmaps/$roadmap/tracks/$slug",
+        params: { roadmap: input.roadmap, slug: input.slug },
+      });
+    },
+  });
 
-  const slugValid = slug.length > 0 && SLUG_PATTERN.test(slug);
+  const slugValid = isValidSlug(slug);
   const canSubmit = roadmap.trim().length > 0 && slugValid && !createMutation.isPending;
 
   const reset = () => {
@@ -48,27 +58,7 @@ export function NewFileDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-
-    createMutation.mutate(
-      { roadmap: roadmap.trim(), slug: slug.trim() },
-      {
-        onSuccess: () => {
-          toast.success("File created successfully");
-          queryClient.invalidateQueries({ queryKey: [["content", "list"]] });
-          const targetRoadmap = roadmap.trim();
-          const targetSlug = slug.trim();
-          reset();
-          onOpenChange(false);
-          navigate({
-            to: "/admin/roadmaps/$roadmap/tracks/$slug",
-            params: { roadmap: targetRoadmap, slug: targetSlug },
-          });
-        },
-        onError: (err) => {
-          toast.error(err.message);
-        },
-      },
-    );
+    createMutation.mutate({ roadmap: roadmap.trim(), slug: slug.trim() });
   };
 
   if (!open) return null;

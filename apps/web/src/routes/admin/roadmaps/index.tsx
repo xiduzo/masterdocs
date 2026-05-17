@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@masterdocs/ui/components/badge";
 import { Button } from "@masterdocs/ui/components/button";
 import { Skeleton } from "@masterdocs/ui/components/skeleton";
@@ -21,8 +21,10 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { toast } from "sonner";
 
+import { slugToTitle } from "@masterdocs/api/lib/slug";
+
+import { useContentMutation } from "@/hooks/use-content-mutation";
 import { trpc } from "@/utils/trpc";
 
 export const Route = createFileRoute("/admin/roadmaps/")({
@@ -47,10 +49,6 @@ function getPalette(slug: string) {
   return ROADMAP_PALETTES[hash % ROADMAP_PALETTES.length];
 }
 
-function slugToTitle(slug: string) {
-  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 const TABS = ["All Items", "Recently Updated", "Archived"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -60,11 +58,14 @@ function RoadmapsDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("All Items");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const { data, isLoading } = useQuery(trpc.content.list.queryOptions());
-  const deleteRoadmapMutation = useMutation(trpc.content.deleteRoadmap.mutationOptions());
+  const deleteRoadmapMutation = useContentMutation({
+    ...trpc.content.deleteRoadmap.mutationOptions(),
+    successMessage: "Roadmap deleted",
+    errorPrefix: "",
+  });
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -130,16 +131,7 @@ function RoadmapsDashboard() {
   const handleDeleteRoadmap = async (slug: string) => {
     const confirmed = window.confirm(`Delete roadmap "${slug}" and everything inside it? This cannot be undone.`);
     if (!confirmed) return;
-    deleteRoadmapMutation.mutate(
-      { roadmap: slug },
-      {
-        onSuccess: () => {
-          toast.success("Roadmap deleted");
-          queryClient.invalidateQueries({ queryKey: trpc.content.list.queryKey() });
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    );
+    deleteRoadmapMutation.mutate({ roadmap: slug });
   };
 
   // ── Render ────────────────────────────────────────────────────────────────

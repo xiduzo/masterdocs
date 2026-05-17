@@ -1,6 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import type { MdxFrontmatter } from "@masterdocs/api/lib/mdx";
 import {
@@ -8,7 +7,7 @@ import {
   type ContentList,
 } from "@masterdocs/api/lib/content-list-cache";
 
-import { useOptimisticListMutation } from "@/hooks/use-optimistic-list-mutation";
+import { useContentMutation } from "@/hooks/use-content-mutation";
 import { trpc } from "@/utils/trpc";
 
 interface ContentEditorProps {
@@ -19,8 +18,6 @@ interface ContentEditorProps {
 }
 
 export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEditorProps) {
-  const queryClient = useQueryClient();
-
   const { data, isLoading, error } = useQuery({
     ...trpc.content.get.queryOptions({ roadmap, track, slug, fromBranch }),
     meta: { silentError: true },
@@ -49,18 +46,8 @@ export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEd
     enabled: !!prNumber,
   });
 
-  const contentListQueryKey = trpc.content.list.queryKey();
-
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: trpc.content.get.queryKey() });
-    queryClient.invalidateQueries({ queryKey: contentListQueryKey });
-    queryClient.invalidateQueries({ queryKey: trpc.content.listPending.queryKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.content.checkConflict.queryKey() });
-  };
-
-  const submitMutation = useOptimisticListMutation({
+  const submitMutation = useContentMutation({
     ...trpc.content.submit.mutationOptions(),
-    queryKey: contentListQueryKey,
     optimistic: (groups: ContentList | undefined, input) =>
       updateContentFile(
         groups,
@@ -71,29 +58,27 @@ export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEd
           title: input.frontmatter.title,
         }),
       ),
-    onSuccess: (result) => {
-      toast.success(result.isNew ? "Submitted for review" : "Submission updated");
-    },
-    onError: (err) => {
-      toast.error(`Submit failed: ${err.message}`);
-    },
-    onSettled: invalidateAll,
+    successMessage: (result) =>
+      result.isNew ? "Submitted for review" : "Submission updated",
+    errorPrefix: "Submit failed",
   });
 
-  const publishMutation = useOptimisticListMutation({
+  const publishMutation = useContentMutation({
     ...trpc.content.publish.mutationOptions(),
-    queryKey: contentListQueryKey,
     optimistic: (groups: ContentList | undefined) =>
       updateContentFile(groups, { roadmap, slug, track }, (f) => ({
         ...f,
         state: "published" as const,
       })),
-    onSuccess: () => toast.success("Published successfully"),
-    onError: (err) => toast.error(`Publish failed: ${err.message}`),
-    onSettled: invalidateAll,
+    successMessage: "Published successfully",
+    errorPrefix: "Publish failed",
   });
 
-  const discardMutation = useMutation(trpc.content.discard.mutationOptions());
+  const discardMutation = useContentMutation({
+    ...trpc.content.discard.mutationOptions(),
+    successMessage: "Changes discarded",
+    errorPrefix: "Discard failed",
+  });
 
   const handleSubmit = () => {
     if (!frontmatter || body === null) return;
@@ -114,16 +99,7 @@ export function useContentEditor({ roadmap, slug, track, fromBranch }: ContentEd
 
   const handleDiscard = () => {
     if (!prNumber) return;
-    discardMutation.mutate(
-      { prNumber },
-      {
-        onSuccess: () => {
-          toast.success("Changes discarded");
-          invalidateAll();
-        },
-        onError: (err) => toast.error(`Discard failed: ${err.message}`),
-      },
-    );
+    discardMutation.mutate({ prNumber });
   };
 
   return {
